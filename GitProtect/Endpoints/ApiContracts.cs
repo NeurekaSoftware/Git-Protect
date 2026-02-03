@@ -63,9 +63,11 @@ public sealed record RepositoryDto(
 public sealed record BackupTaskDto(
     int Id,
     string Name,
-    ProviderType Provider,
+    ProviderType? Provider,
     int? RepositoryId,
     BackupTaskStatus Status,
+    BackupTaskType TaskType,
+    BackupTaskTrigger Trigger,
     int Progress,
     DateTime CreatedAt,
     DateTime? StartedAt,

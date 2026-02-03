@@ -34,6 +34,7 @@ else
                 <tr>
                     <th>Task</th>
                     <th>Status</th>
+                    <th>Type</th>
                     <th>Progress</th>
                     <th>Started</th>
                 </tr>
@@ -57,6 +58,7 @@ else
                                 @GetStatusBadge(task.Status)
                             }
                         </td>
+                        <td>@GetTriggerLabel(task.Trigger)</td>
                         <td>@task.Progress%</td>
                         <td>@(task.StartedAt?.ToLocalTime().ToString("g") ?? "-")</td>
                     </tr>
@@ -180,6 +182,9 @@ else
         builder.AddContent(2, label);
         builder.CloseElement();
     };
+
+    private static string GetTriggerLabel(BackupTaskTrigger trigger)
+        => trigger == BackupTaskTrigger.Scheduled ? "Scheduled" : "Manual";
 
     public ValueTask DisposeAsync()
     {

@@ -295,7 +295,8 @@ else
     };
 
     private bool IsProviderBackupRunning => tasks.Any(task =>
-        task.Provider == Provider
+        task.TaskType == BackupTaskType.Backup
+        && task.Provider == Provider
         && task.RepositoryId is null
         && IsTaskActive(task.Status));
 
@@ -305,7 +306,8 @@ else
             || repoBackupRequests.Contains(repoId)
             || IsProviderBackupRunning
             || tasks.Any(task =>
-                task.Provider == Provider
+                task.TaskType == BackupTaskType.Backup
+                && task.Provider == Provider
                 && task.RepositoryId == repoId
                 && IsTaskActive(task.Status));
     }

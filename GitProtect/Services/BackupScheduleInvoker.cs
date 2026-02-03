@@ -45,7 +45,8 @@ public sealed class BackupScheduleInvoker : IInvocable
 
         var activeProviders = await _db.BackupTasks
             .AsNoTracking()
-            .Where(t => t.RepositoryId == null
+            .Where(t => t.TaskType == BackupTaskType.Backup
+                && t.RepositoryId == null
                 && (t.Status == BackupTaskStatus.Pending || t.Status == BackupTaskStatus.Running))
             .Select(t => t.Provider)
             .ToListAsync();
@@ -65,6 +66,8 @@ public sealed class BackupScheduleInvoker : IInvocable
                 Provider = provider.Provider,
                 Name = $"{provider.Provider} Backup",
                 Status = BackupTaskStatus.Pending,
+                TaskType = BackupTaskType.Backup,
+                Trigger = BackupTaskTrigger.Scheduled,
                 Progress = 0
             };
 
@@ -81,7 +84,13 @@ public sealed class BackupScheduleInvoker : IInvocable
 
         foreach (var task in newTasks)
         {
-            await _queue.EnqueueAsync(new BackupJob(task.Id, task.Provider, null));
+            if (task.Provider is null)
+            {
+                _logger.LogWarning("Scheduled backup task {TaskId} has no provider.", task.Id);
+                continue;
+            }
+
+            await _queue.EnqueueAsync(new BackupJob(task.Id, task.Provider.Value, null));
         }
 
         _logger.LogInformation("Scheduled backup queued for {Count} providers.", newTasks.Count);

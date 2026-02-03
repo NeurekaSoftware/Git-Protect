@@ -23,6 +23,18 @@ public enum BackupTaskStatus
     Failed = 3
 }
 
+public enum BackupTaskType
+{
+    Backup = 0,
+    Prune = 1
+}
+
+public enum BackupTaskTrigger
+{
+    Manual = 0,
+    Scheduled = 1
+}
+
 public sealed record SetupStatusDto(bool StorageConfigured, bool StorageVerified, IReadOnlyList<ProviderStatusDto> Providers);
 
 public sealed record ProviderStatusDto(
@@ -62,9 +74,11 @@ public sealed record RepositoryDto(
 public sealed record BackupTaskDto(
     int Id,
     string Name,
-    ProviderType Provider,
+    ProviderType? Provider,
     int? RepositoryId,
     BackupTaskStatus Status,
+    BackupTaskType TaskType,
+    BackupTaskTrigger Trigger,
     int Progress,
     DateTime CreatedAt,
     DateTime? StartedAt,

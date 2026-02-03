@@ -7,3 +7,15 @@ public enum BackupTaskStatus
     Success = 2,
     Failed = 3
 }
+
+public enum BackupTaskType
+{
+    Backup = 0,
+    Prune = 1
+}
+
+public enum BackupTaskTrigger
+{
+    Manual = 0,
+    Scheduled = 1
+}

@@ -1,5 +1,6 @@
 using Coravel.Invocable;
 using GitProtect.Data;
+using GitProtect.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace GitProtect.Services;
@@ -38,12 +39,48 @@ public sealed class RetentionPolicyInvoker : IInvocable
             return;
         }
 
-        var cutoff = DateTimeOffset.UtcNow.AddDays(-policy.RetentionDays);
-        var deleted = await _storageService.DeleteBackupsOlderThanAsync(storage, cutoff, CancellationToken.None);
-
-        if (deleted > 0)
+        var task = new BackupTask
         {
-            _logger.LogInformation("Retention policy deleted {Count} backup object(s) older than {Cutoff}.", deleted, cutoff);
+            Name = "Retention Prune",
+            Status = BackupTaskStatus.Running,
+            TaskType = BackupTaskType.Prune,
+            Trigger = BackupTaskTrigger.Scheduled,
+            Progress = 0,
+            StartedAt = DateTime.UtcNow
+        };
+
+        _db.BackupTasks.Add(task);
+        await _db.SaveChangesAsync();
+
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-policy.RetentionDays);
+            var deleted = await _storageService.DeleteBackupsOlderThanAsync(storage, cutoff, CancellationToken.None);
+
+            task.Status = BackupTaskStatus.Success;
+            task.Progress = 100;
+            task.CompletedAt = DateTime.UtcNow;
+            task.Message = deleted > 0
+                ? $"Deleted {deleted} backup object(s) older than {cutoff.UtcDateTime:g}."
+                : "No expired backups were found.";
+
+            await _db.SaveChangesAsync();
+
+            if (deleted > 0)
+            {
+                _logger.LogInformation("Retention policy deleted {Count} backup object(s) older than {Cutoff}.", deleted, cutoff);
+            }
+        }
+        catch (Exception ex)
+        {
+            task.Status = BackupTaskStatus.Failed;
+            task.Progress = 100;
+            task.CompletedAt = DateTime.UtcNow;
+            task.Message = ex.Message;
+
+            await _db.SaveChangesAsync();
+
+            _logger.LogError(ex, "Retention policy prune failed.");
         }
     }
 }

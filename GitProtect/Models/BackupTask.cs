@@ -3,10 +3,12 @@ namespace GitProtect.Models;
 public sealed class BackupTask
 {
     public int Id { get; set; }
-    public ProviderType Provider { get; set; }
+    public ProviderType? Provider { get; set; }
     public int? RepositoryId { get; set; }
     public string Name { get; set; } = string.Empty;
     public BackupTaskStatus Status { get; set; } = BackupTaskStatus.Pending;
+    public BackupTaskType TaskType { get; set; } = BackupTaskType.Backup;
+    public BackupTaskTrigger Trigger { get; set; } = BackupTaskTrigger.Manual;
     public int Progress { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? StartedAt { get; set; }

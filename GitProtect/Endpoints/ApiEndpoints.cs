@@ -161,6 +161,8 @@ public static class ApiEndpoints
                 Provider = providerType,
                 Name = $"{providerType} Backup",
                 Status = BackupTaskStatus.Pending,
+                TaskType = BackupTaskType.Backup,
+                Trigger = BackupTaskTrigger.Manual,
                 Progress = 0
             };
 
@@ -200,6 +202,8 @@ public static class ApiEndpoints
                 RepositoryId = repoId,
                 Name = $"{repo.FullName} Backup",
                 Status = BackupTaskStatus.Pending,
+                TaskType = BackupTaskType.Backup,
+                Trigger = BackupTaskTrigger.Manual,
                 Progress = 0
             };
 
@@ -362,10 +366,46 @@ public static class ApiEndpoints
                 return Results.BadRequest(new { message = "Storage is not configured." });
             }
 
-            var cutoff = DateTimeOffset.UtcNow.AddDays(-policy.RetentionDays);
-            var deleted = await storageService.DeleteBackupsOlderThanAsync(storage, cutoff, cancellationToken);
+            var task = new BackupTask
+            {
+                Name = "Retention Prune",
+                Status = BackupTaskStatus.Running,
+                TaskType = BackupTaskType.Prune,
+                Trigger = BackupTaskTrigger.Manual,
+                Progress = 0,
+                StartedAt = DateTime.UtcNow
+            };
 
-            return Results.Ok(new RetentionPruneResultDto(deleted, cutoff.UtcDateTime));
+            db.BackupTasks.Add(task);
+            await db.SaveChangesAsync(cancellationToken);
+
+            try
+            {
+                var cutoff = DateTimeOffset.UtcNow.AddDays(-policy.RetentionDays);
+                var deleted = await storageService.DeleteBackupsOlderThanAsync(storage, cutoff, cancellationToken);
+
+                task.Status = BackupTaskStatus.Success;
+                task.Progress = 100;
+                task.CompletedAt = DateTime.UtcNow;
+                task.Message = deleted > 0
+                    ? $"Deleted {deleted} backup object(s) older than {cutoff.UtcDateTime:g}."
+                    : "No expired backups were found.";
+
+                await db.SaveChangesAsync(cancellationToken);
+
+                return Results.Ok(new RetentionPruneResultDto(deleted, cutoff.UtcDateTime));
+            }
+            catch (Exception ex)
+            {
+                task.Status = BackupTaskStatus.Failed;
+                task.Progress = 100;
+                task.CompletedAt = DateTime.UtcNow;
+                task.Message = ex.Message;
+
+                await db.SaveChangesAsync(cancellationToken);
+
+                return Results.Problem("Retention prune failed.");
+            }
         });
 
         api.MapGet("/dashboard", async (GitProtectDbContext db, CancellationToken cancellationToken) =>
@@ -434,6 +474,8 @@ public static class ApiEndpoints
             task.Provider,
             task.RepositoryId,
             task.Status,
+            task.TaskType,
+            task.Trigger,
             task.Progress,
             task.CreatedAt,
             task.StartedAt,
@@ -501,7 +543,8 @@ public static class ApiEndpoints
     private static Task<bool> IsProviderBackupInProgressAsync(GitProtectDbContext db, ProviderType provider, CancellationToken cancellationToken)
     {
         return db.BackupTasks.AnyAsync(t =>
-            t.Provider == provider
+            t.TaskType == BackupTaskType.Backup
+            && t.Provider == provider
             && t.RepositoryId == null
             && (t.Status == BackupTaskStatus.Pending || t.Status == BackupTaskStatus.Running),
             cancellationToken);
@@ -510,7 +553,8 @@ public static class ApiEndpoints
     private static Task<bool> IsRepositoryBackupInProgressAsync(GitProtectDbContext db, ProviderType provider, int repoId, CancellationToken cancellationToken)
     {
         return db.BackupTasks.AnyAsync(t =>
-            t.Provider == provider
+            t.TaskType == BackupTaskType.Backup
+            && t.Provider == provider
             && t.RepositoryId == repoId
             && (t.Status == BackupTaskStatus.Pending || t.Status == BackupTaskStatus.Running),
             cancellationToken);

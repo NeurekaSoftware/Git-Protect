@@ -45,5 +45,13 @@ public sealed class GitProtectDbContext : DbContext
         modelBuilder.Entity<BackupTask>()
             .Property(t => t.Status)
             .HasConversion<string>();
+
+        modelBuilder.Entity<BackupTask>()
+            .Property(t => t.TaskType)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<BackupTask>()
+            .Property(t => t.Trigger)
+            .HasConversion<string>();
     }
 }
