@@ -78,8 +78,12 @@ a {
     color: rgba(255, 255, 255, 0.9);
 }
 
-.brand-mark i.fa-cat {
+.brand-mark i.fa-git-alt {
     font-size: 18px;
+}
+
+.brand-mark i.brand-mark-git {
+    color: var(--accent);
 }
 
 .brand-title {
