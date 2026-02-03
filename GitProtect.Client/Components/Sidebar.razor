@@ -1,0 +1,20 @@
+<aside class="sidebar">
+    <BrandMark />
+
+    <nav class="sidebar-nav">
+        <SidebarNavItem Href="/" Label="Dashboard" IconClass="fa-solid fa-gauge" Match="NavLinkMatch.All" />
+
+        <SidebarNavItem Href="/backups" Label="Backups" IconClass="fa-solid fa-shield-halved" />
+        <div class="sidebar-subnav">
+            <SidebarNavItem Href="/backups/github" Label="GitHub" IconClass="fa-brands fa-github" IsSubItem="true" />
+            <SidebarNavItem Href="/backups/gitlab" Label="GitLab" IconClass="fa-brands fa-gitlab" IsSubItem="true" />
+            <SidebarNavItem Href="/backups/forgejo" Label="Forgejo" IconClass="fa-solid fa-code-branch" IsSubItem="true" />
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <SidebarNavItem Href="/storage" Label="Storage" IconClass="fa-solid fa-database" />
+        <SidebarNavItem Href="/tasks" Label="Tasks" IconClass="fa-solid fa-list-check" />
+        <SidebarNavItem Href="/settings" Label="Settings" IconClass="fa-solid fa-gear" />
+    </nav>
+</aside>

@@ -1,0 +1,129 @@
+@page "/"
+@rendermode InteractiveWebAssembly
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Dashboard</h1>
+        <p class="page-subtitle">Overall backup posture across GitHub, GitLab, and Forgejo.</p>
+    </div>
+    <button class="button" @onclick="RunAllBackups" disabled="@isLoading">Run All Backups</button>
+</div>
+
+@if (isLoading)
+{
+    <div class="card">Loading dashboard...</div>
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="card">@error</div>
+}
+else if (dashboard is null)
+{
+    <div class="card">No data yet.</div>
+}
+else
+{
+    <div class="card-grid">
+        <div class="card">
+            <p class="card-title">Total Repositories</p>
+            <div class="stat-value">@dashboard.TotalRepositories</div>
+            <div class="stat-sub">Across all providers</div>
+        </div>
+        <div class="card">
+            <p class="card-title">Protected</p>
+            <div class="stat-value">@dashboard.ProtectedCount</div>
+            <div class="stat-sub">Successful backups</div>
+        </div>
+        <div class="card">
+            <p class="card-title">Needs Attention</p>
+            <div class="stat-value">@dashboard.FailedCount</div>
+            <div class="stat-sub">Failed backups</div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 24px;">
+        <p class="card-title">Backup Activity</p>
+        @if (dashboard.Activity.Count == 0)
+        {
+            <div class="empty-state">No recent backup activity.</div>
+        }
+        else
+        {
+            <div class="chart">
+                @foreach (var point in dashboard.Activity)
+                {
+                    <div class="chart-bar" style="height: @GetBarHeight(point.Value)%;">
+                        <span>@point.Label</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private ApiClient Api { get; set; } = default!;
+
+    private DashboardDto? dashboard;
+    private bool isLoading;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            isLoading = true;
+            dashboard = await Api.GetDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private double GetBarHeight(int value)
+    {
+        if (dashboard is null || dashboard.Activity.Count == 0)
+        {
+            return 10;
+        }
+
+        var max = dashboard.Activity.Max(p => p.Value);
+        if (max == 0)
+        {
+            return 10;
+        }
+
+        return Math.Clamp((value / (double)max) * 100, 10, 100);
+    }
+
+    private async Task RunAllBackups()
+    {
+        isLoading = true;
+        try
+        {
+            var providers = await Api.GetProvidersAsync();
+            foreach (var provider in providers.Where(p => p.IsVerified))
+            {
+                await Api.RunBackupAsync(provider.Provider);
+            }
+
+            await LoadAsync();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

@@ -1,0 +1,196 @@
+@page "/tasks"
+@rendermode InteractiveWebAssembly
+@implements IAsyncDisposable
+@inject ApiClient Api
+
+<PageTitle>Tasks</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Tasks</h1>
+        <p class="page-subtitle">Current and recent backup runs.</p>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="card">Loading tasks...</div>
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="card">@error</div>
+}
+else if (tasks.Count == 0)
+{
+    <div class="card">
+        <div class="empty-state">No tasks yet.</div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Task</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var task in tasks)
+                {
+                    <tr>
+                        <td>@task.Name</td>
+                        <td>
+                            @if (task.Status == BackupTaskStatus.Failed)
+                            {
+                                <button type="button"
+                                        class="badge badge-button danger"
+                                        @onclick="() => ShowFailure(task)">
+                                    Failed
+                                </button>
+                            }
+                            else
+                            {
+                                @GetStatusBadge(task.Status)
+                            }
+                        </td>
+                        <td>@task.Progress%</td>
+                        <td>@(task.StartedAt?.ToLocalTime().ToString("g") ?? "-")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<BackupTaskDto> tasks = new();
+    private bool isLoading = true;
+    private string? error;
+    private bool isFailureDialogOpen;
+    private string failureTitle = "Task Failure";
+    private string failureMessage = string.Empty;
+    private bool isRefreshing;
+    private CancellationTokenSource? refreshCts;
+    private PeriodicTimer? refreshTimer;
+    private readonly TimeSpan refreshInterval = TimeSpan.FromSeconds(5);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(showLoading: true);
+        StartAutoRefresh();
+    }
+
+    private void StartAutoRefresh()
+    {
+        refreshCts = new CancellationTokenSource();
+        refreshTimer = new PeriodicTimer(refreshInterval);
+        _ = RefreshLoopAsync(refreshCts.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        if (refreshTimer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await refreshTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await LoadAsync(showLoading: false, cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadAsync(bool showLoading, CancellationToken cancellationToken = default)
+    {
+        if (isRefreshing)
+        {
+            return;
+        }
+
+        isRefreshing = true;
+        if (showLoading)
+        {
+            error = null;
+            isLoading = true;
+        }
+
+        try
+        {
+            tasks = await Api.GetTasksAsync(cancellationToken);
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            if (showLoading)
+            {
+                isLoading = false;
+            }
+
+            isRefreshing = false;
+        }
+    }
+
+    private void ShowFailure(string title, string? message)
+    {
+        failureTitle = title;
+        failureMessage = string.IsNullOrWhiteSpace(message)
+            ? "No additional details were provided."
+            : message;
+        isFailureDialogOpen = true;
+    }
+
+    private void ShowFailure(BackupTaskDto task)
+    {
+        ShowFailure($"Task failed: {task.Name}", task.Message);
+    }
+
+    private Task CloseFailure()
+    {
+        isFailureDialogOpen = false;
+        return Task.CompletedTask;
+    }
+
+    private static RenderFragment GetStatusBadge(BackupTaskStatus status) => builder =>
+    {
+        var (label, css) = status switch
+        {
+            BackupTaskStatus.Success => ("Completed", "success"),
+            BackupTaskStatus.Running => ("Running", "warning"),
+            BackupTaskStatus.Failed => ("Failed", "danger"),
+            _ => ("Pending", "neutral")
+        };
+
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", $"badge {css}");
+        builder.AddContent(2, label);
+        builder.CloseElement();
+    };
+
+    public ValueTask DisposeAsync()
+    {
+        refreshCts?.Cancel();
+        refreshTimer?.Dispose();
+        refreshCts?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
+
+<FailureDialog Open="@isFailureDialogOpen"
+               Title="@failureTitle"
+               Message="@failureMessage"
+               OnClose="CloseFailure" />

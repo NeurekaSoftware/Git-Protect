@@ -1,0 +1,34 @@
+@if (Open)
+{
+    <div class="modal-backdrop" @onclick="Close">
+        <div class="modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>@Title</h3>
+                <button class="icon-button" @onclick="Close" aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>@Message</p>
+            </div>
+            <div class="modal-footer">
+                <button class="button secondary" @onclick="Close">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public string Title { get; set; } = "Backup Failure";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private async Task Close()
+    {
+        if (OnClose.HasDelegate)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+}

@@ -1,0 +1,104 @@
+@page "/storage"
+@rendermode InteractiveWebAssembly
+@inject ApiClient Api
+
+<PageTitle>Storage</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Storage</h1>
+        <p class="page-subtitle">S3 capacity, usage, and last verification.</p>
+    </div>
+    <button class="button secondary" @onclick="LoadAsync">Refresh</button>
+</div>
+
+@if (isLoading)
+{
+    <div class="card">Loading storage...</div>
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="card">@error</div>
+}
+else if (storage?.Config is null)
+{
+    <div class="card">
+        <div class="empty-state">Storage is not configured. Go to <a href="/settings">Settings</a>.</div>
+    </div>
+}
+else
+{
+    var config = storage.Config;
+    <div class="card-grid">
+        <div class="card">
+            <p class="card-title">Bucket</p>
+            <div class="stat-value">@config.Bucket</div>
+            <div class="stat-sub">@config.Region</div>
+        </div>
+        <div class="card">
+            <p class="card-title">Used</p>
+            <div class="stat-value">@FormatBytes(storage.TotalBytes)</div>
+            <div class="stat-sub">Total mirror uploads</div>
+        </div>
+        <div class="card">
+            <p class="card-title">Last Verify</p>
+            <div class="stat-value">@(config.VerifiedAt?.ToLocalTime().ToString("g") ?? "Never")</div>
+            <div class="stat-sub">Endpoint: @config.Endpoint</div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 24px;">
+        <p class="card-title">Storage Trend</p>
+        <div class="chart">
+            <div class="chart-bar" style="height: 30%;"><span>Jan</span></div>
+            <div class="chart-bar" style="height: 45%;"><span>Feb</span></div>
+            <div class="chart-bar" style="height: 55%;"><span>Mar</span></div>
+            <div class="chart-bar" style="height: 70%;"><span>Apr</span></div>
+            <div class="chart-bar" style="height: 80%;"><span>May</span></div>
+            <div class="chart-bar" style="height: 90%;"><span>Jun</span></div>
+        </div>
+    </div>
+}
+
+@code {
+    private StorageDetailsDto? storage;
+    private bool isLoading = true;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        error = null;
+        isLoading = true;
+        try
+        {
+            storage = await Api.GetStorageAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        double size = bytes;
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        var unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.Length - 1)
+        {
+            size /= 1024;
+            unitIndex++;
+        }
+
+        return $"{size:0.#} {units[unitIndex]}";
+    }
+}

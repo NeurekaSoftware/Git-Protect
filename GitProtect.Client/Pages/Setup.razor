@@ -1,0 +1,167 @@
+@page "/setup"
+@rendermode InteractiveWebAssembly
+@inject NavigationManager Nav
+@inject ApiClient Api
+
+<PageTitle>Setup</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Setup GitProtect</h1>
+        <p class="page-subtitle">Connect a provider, then verify S3 storage.</p>
+    </div>
+</div>
+
+<div class="stepper">
+    <div class="step @(step == 1 ? "is-active" : string.Empty)">1. Provider</div>
+    <div class="step @(step == 2 ? "is-active" : string.Empty)">2. Storage</div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="card" style="margin-bottom: 16px;">@error</div>
+}
+
+@if (step == 1)
+{
+    <div class="card">
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="label">Provider</label>
+                <select class="select" @bind="selectedProvider" @bind:after="OnProviderChanged">
+                    <option value="@ProviderType.GitHub">GitHub</option>
+                    <option value="@ProviderType.GitLab">GitLab</option>
+                    <option value="@ProviderType.Forgejo">Forgejo</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="label">Instance URL</label>
+                <input class="input" @bind="baseUrl" />
+            </div>
+            <div class="form-group">
+                <label class="label">Username</label>
+                <input class="input" @bind="username" placeholder="octocat" />
+            </div>
+            <div class="form-group">
+                <label class="label">API Key</label>
+                <input class="input" @bind="apiKey" placeholder="token" />
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top: 18px;">
+            <button class="button" @onclick="ContinueToStorage" disabled="@isBusy">Continue to Storage</button>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="form-grid">
+            <div class="form-group">
+                <label class="label">Endpoint</label>
+                <input class="input" @bind="s3Endpoint" placeholder="https://s3.amazonaws.com" />
+            </div>
+            <div class="form-group">
+                <label class="label">Region</label>
+                <input class="input" @bind="s3Region" placeholder="us-east-1" />
+            </div>
+            <div class="form-group">
+                <label class="label">Bucket</label>
+                <input class="input" @bind="s3Bucket" placeholder="gitprotect-backups" />
+            </div>
+            <div class="form-group">
+                <label class="label">Access Key</label>
+                <input class="input" @bind="s3AccessKey" />
+            </div>
+            <div class="form-group">
+                <label class="label">Secret Key</label>
+                <input class="input" @bind="s3SecretKey" />
+            </div>
+            <div class="form-group">
+                <label class="label">Path Style</label>
+                <label class="checkbox-row">
+                    <input type="checkbox" class="checkbox" @bind="s3UsePathStyle" />
+                    Use path-style requests (endpoint/bucket)
+                </label>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
+            <button class="button secondary" @onclick="() => step = 1" disabled="@isBusy">Back</button>
+            <button class="button" @onclick="SaveStorage" disabled="@isBusy">Verify & Save</button>
+        </div>
+    </div>
+}
+
+@code {
+    private int step = 1;
+    private bool isBusy;
+    private string? error;
+
+    private ProviderType selectedProvider = ProviderType.GitHub;
+    private string baseUrl = "https://github.com";
+    private string username = string.Empty;
+    private string apiKey = string.Empty;
+
+    private string s3Endpoint = string.Empty;
+    private string s3Region = string.Empty;
+    private string s3Bucket = string.Empty;
+    private string s3AccessKey = string.Empty;
+    private string s3SecretKey = string.Empty;
+    private bool s3UsePathStyle;
+
+    private async Task ContinueToStorage()
+    {
+        error = null;
+        isBusy = true;
+        try
+        {
+            var result = await Api.SaveProviderAsync(selectedProvider, new ProviderUpsertRequest(baseUrl, username, apiKey));
+            if (!result.Success || result.Data is null)
+            {
+                error = result.Error ?? "Provider validation failed. Please verify your URL and API key.";
+                return;
+            }
+
+            step = 2;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task SaveStorage()
+    {
+        error = null;
+        isBusy = true;
+        try
+        {
+            var result = await Api.SaveStorageAsync(new S3UpsertRequest(s3Endpoint, s3Region, s3Bucket, s3AccessKey, s3SecretKey, s3UsePathStyle));
+            if (!result.Success || result.Data is null)
+            {
+                error = result.Error ?? "Storage validation failed. Please check your S3 credentials.";
+                return;
+            }
+
+            Nav.NavigateTo($"/backups/{selectedProvider.ToString().ToLowerInvariant()}");
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private Task OnProviderChanged()
+    {
+        baseUrl = selectedProvider switch
+        {
+            ProviderType.GitHub => "https://github.com",
+            ProviderType.GitLab => "https://gitlab.com",
+            ProviderType.Forgejo => "https://codeberg.org",
+            _ => baseUrl
+        };
+
+        return Task.CompletedTask;
+    }
+}

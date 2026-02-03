@@ -1,0 +1,328 @@
+@using GitProtect.Client.Models
+@implements IAsyncDisposable
+@inject ApiClient Api
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">@Title</h1>
+        <p class="page-subtitle">API + git mirror backups with LFS support.</p>
+    </div>
+    <div style="display:flex; gap:12px;">
+        <button class="button secondary" @onclick="SyncRepos" disabled="@(isSyncing || isLoading)">Sync Repos</button>
+        <button class="button" @onclick="RunBackup" disabled="@(isProviderBackupRequested || IsProviderBackupRunning || isLoading)">Run Backup</button>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="card">Loading repositories...</div>
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="card">@error</div>
+}
+else if (provider is null || !provider.IsVerified)
+{
+    <div class="card">
+        <div class="empty-state">Connect @Title in <a href="/setup">Setup</a> or <a href="/settings">Settings</a> to view repositories.</div>
+    </div>
+}
+else if (repositories.Count == 0)
+{
+    <div class="card">
+        <div class="empty-state">No repositories found. Sync to pull your list.</div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Repository</th>
+                    <th>Status</th>
+                    <th>Last Backup</th>
+                    <th>Size</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var repo in repositories)
+                {
+                    <tr>
+                        <td>@repo.FullName</td>
+                        <td>
+                            @if (repo.Status == BackupStatus.Failed)
+                            {
+                                <button type="button"
+                                        class="badge badge-button danger"
+                                        @onclick="() => ShowFailure(repo)">
+                                    Failed
+                                </button>
+                            }
+                            else
+                            {
+                                @GetStatusBadge(repo.Status)
+                            }
+                        </td>
+                        <td>@(repo.LastBackupAt?.ToLocalTime().ToString("g") ?? "Never")</td>
+                        <td>@FormatBytes(repo.LastBackupSizeBytes)</td>
+                        <td>
+                            <button class="button ghost"
+                                    @onclick="() => RunRepoBackup(repo.Id)"
+                                    disabled="@(IsRepoBackupDisabled(repo.Id))">
+                                Backup
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter] public ProviderType Provider { get; set; }
+    [Parameter] public string Title { get; set; } = string.Empty;
+
+    private ProviderStatusDto? provider;
+    private List<RepositoryDto> repositories = new();
+    private List<BackupTaskDto> tasks = new();
+    private bool isLoading = true;
+    private bool isRefreshing;
+    private bool isSyncing;
+    private bool isProviderBackupRequested;
+    private readonly HashSet<int> repoBackupRequests = new();
+    private CancellationTokenSource? refreshCts;
+    private PeriodicTimer? refreshTimer;
+    private readonly TimeSpan refreshInterval = TimeSpan.FromSeconds(5);
+    private string? error;
+    private bool isFailureDialogOpen;
+    private string failureTitle = "Backup Failure";
+    private string failureMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync(showLoading: true);
+        StartAutoRefresh();
+    }
+
+    private void StartAutoRefresh()
+    {
+        refreshCts = new CancellationTokenSource();
+        refreshTimer = new PeriodicTimer(refreshInterval);
+        _ = RefreshLoopAsync(refreshCts.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken cancellationToken)
+    {
+        if (refreshTimer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            while (await refreshTimer.WaitForNextTickAsync(cancellationToken))
+            {
+                await LoadAsync(showLoading: false, cancellationToken);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadAsync(bool showLoading, CancellationToken cancellationToken = default)
+    {
+        if (isRefreshing)
+        {
+            return;
+        }
+
+        isRefreshing = true;
+        if (showLoading)
+        {
+            isLoading = true;
+            error = null;
+        }
+
+        try
+        {
+            var providers = await Api.GetProvidersAsync(cancellationToken);
+            provider = providers.FirstOrDefault(p => p.Provider == Provider);
+            tasks = await Api.GetTasksAsync(cancellationToken);
+            if (provider?.IsVerified == true)
+            {
+                repositories = await Api.GetReposAsync(Provider, cancellationToken);
+            }
+            else
+            {
+                repositories = new();
+            }
+
+            error = null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            if (showLoading)
+            {
+                isLoading = false;
+            }
+
+            isRefreshing = false;
+        }
+    }
+
+    private async Task SyncRepos()
+    {
+        if (isSyncing)
+        {
+            return;
+        }
+
+        isSyncing = true;
+        try
+        {
+            await Api.SyncReposAsync(Provider);
+            await LoadAsync(showLoading: false);
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            isSyncing = false;
+        }
+    }
+
+    private async Task RunBackup()
+    {
+        if (IsProviderBackupRunning || isProviderBackupRequested)
+        {
+            return;
+        }
+
+        isProviderBackupRequested = true;
+        try
+        {
+            await Api.RunBackupAsync(Provider);
+            await LoadAsync(showLoading: false);
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            isProviderBackupRequested = false;
+        }
+    }
+
+    private async Task RunRepoBackup(int repoId)
+    {
+        if (IsRepoBackupDisabled(repoId))
+        {
+            return;
+        }
+
+        repoBackupRequests.Add(repoId);
+        try
+        {
+            await Api.RunRepositoryBackupAsync(Provider, repoId);
+            await LoadAsync(showLoading: false);
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            repoBackupRequests.Remove(repoId);
+        }
+    }
+
+    private void ShowFailure(string title, string? message)
+    {
+        failureTitle = title;
+        failureMessage = string.IsNullOrWhiteSpace(message)
+            ? "No additional details were provided."
+            : message;
+        isFailureDialogOpen = true;
+    }
+
+    private void ShowFailure(RepositoryDto repo)
+    {
+        ShowFailure($"Backup failed: {repo.FullName}", repo.LastBackupMessage);
+    }
+
+    private Task CloseFailure()
+    {
+        isFailureDialogOpen = false;
+        return Task.CompletedTask;
+    }
+
+    private static string FormatBytes(long? bytes)
+    {
+        if (!bytes.HasValue)
+        {
+            return "-";
+        }
+
+        double size = bytes.Value;
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        var unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.Length - 1)
+        {
+            size /= 1024;
+            unitIndex++;
+        }
+
+        return $"{size:0.#} {units[unitIndex]}";
+    }
+
+    private static RenderFragment GetStatusBadge(BackupStatus status) => builder =>
+    {
+        var (label, css) = status switch
+        {
+            BackupStatus.Success => ("Healthy", "success"),
+            BackupStatus.Running => ("Running", "warning"),
+            BackupStatus.Failed => ("Failed", "danger"),
+            _ => ("Never", "neutral")
+        };
+
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", $"badge {css}");
+        builder.AddContent(2, label);
+        builder.CloseElement();
+    };
+
+    private bool IsProviderBackupRunning => tasks.Any(task =>
+        task.Provider == Provider
+        && task.RepositoryId is null
+        && IsTaskActive(task.Status));
+
+    private bool IsRepoBackupDisabled(int repoId)
+    {
+        return isLoading
+            || repoBackupRequests.Contains(repoId)
+            || IsProviderBackupRunning
+            || tasks.Any(task =>
+                task.Provider == Provider
+                && task.RepositoryId == repoId
+                && IsTaskActive(task.Status));
+    }
+
+    private static bool IsTaskActive(BackupTaskStatus status)
+        => status is BackupTaskStatus.Pending or BackupTaskStatus.Running;
+
+    public ValueTask DisposeAsync()
+    {
+        refreshCts?.Cancel();
+        refreshTimer?.Dispose();
+        refreshCts?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
+
+<FailureDialog Open="@isFailureDialogOpen"
+               Title="@failureTitle"
+               Message="@failureMessage"
+               OnClose="CloseFailure" />

@@ -1,0 +1,10 @@
+@using GitProtect.Client
+@using GitProtect.Client.Layout
+@using GitProtect.Client.Pages
+
+<Router AppAssembly="typeof(GitProtect.Client._Imports).Assembly" NotFoundPage="typeof(NotFound)">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

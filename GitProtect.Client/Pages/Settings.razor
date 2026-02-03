@@ -1,0 +1,255 @@
+@page "/settings"
+@rendermode InteractiveWebAssembly
+@inject ApiClient Api
+
+<PageTitle>Settings</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Settings</h1>
+        <p class="page-subtitle">Manage provider credentials and S3 storage settings.</p>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom: 24px;">
+    <p class="card-title">Provider Settings</p>
+    @if (!string.IsNullOrWhiteSpace(providerError))
+    {
+        <div class="empty-state">@providerError</div>
+    }
+    <div class="form-grid">
+        <div class="form-group">
+            <label class="label">Provider</label>
+            <select class="select" @bind="selectedProvider" @bind:after="OnProviderSelectionChanged">
+                <option value="@ProviderType.GitHub">GitHub</option>
+                <option value="@ProviderType.GitLab">GitLab</option>
+                <option value="@ProviderType.Forgejo">Forgejo</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="label">Instance URL</label>
+            <input class="input" @bind="providerBaseUrl" />
+        </div>
+        <div class="form-group">
+            <label class="label">Username</label>
+            <input class="input" @bind="providerUsername" />
+        </div>
+        <div class="form-group">
+            <label class="label">API Key</label>
+            <input class="input" @bind="providerApiKey" />
+        </div>
+    </div>
+    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
+        <button class="button" @onclick="SaveProvider" disabled="@isProviderBusy">Save Provider</button>
+    </div>
+</div>
+
+<div class="card">
+    <p class="card-title">S3 Storage</p>
+    @if (!string.IsNullOrWhiteSpace(storageError))
+    {
+        <div class="empty-state">@storageError</div>
+    }
+    <div class="form-grid">
+        <div class="form-group">
+            <label class="label">Endpoint</label>
+            <input class="input" @bind="storageEndpoint" />
+        </div>
+        <div class="form-group">
+            <label class="label">Region</label>
+            <input class="input" @bind="storageRegion" />
+        </div>
+        <div class="form-group">
+            <label class="label">Bucket</label>
+            <input class="input" @bind="storageBucket" />
+        </div>
+        <div class="form-group">
+            <label class="label">Access Key</label>
+            <input class="input" @bind="storageAccessKey" />
+        </div>
+        <div class="form-group">
+            <label class="label">Secret Key</label>
+            <input class="input" @bind="storageSecretKey" />
+        </div>
+        <div class="form-group">
+            <label class="label">Path Style</label>
+            <label class="checkbox-row">
+                <input type="checkbox" class="checkbox" @bind="storageUsePathStyle" />
+                Use path-style requests (endpoint/bucket)
+            </label>
+        </div>
+    </div>
+    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
+        <button class="button" @onclick="SaveStorage" disabled="@isStorageBusy">Save Storage</button>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 24px;">
+    <p class="card-title">Backup Schedule</p>
+    @if (!string.IsNullOrWhiteSpace(scheduleError))
+    {
+        <div class="empty-state">@scheduleError</div>
+    }
+    <div class="form-grid">
+        <div class="form-group">
+            <label class="label">Enabled</label>
+            <label class="checkbox-row">
+                <input type="checkbox" class="checkbox" @bind="scheduleEnabled" />
+                Enable scheduled backups
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="label">Cron Expression</label>
+            <input class="input" @bind="scheduleCron" placeholder="0 0 * * *" />
+        </div>
+    </div>
+    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
+        <button class="button" @onclick="SaveSchedule" disabled="@isScheduleBusy">Save Schedule</button>
+    </div>
+</div>
+
+@code {
+    private List<ProviderStatusDto> providers = new();
+    private ProviderType selectedProvider = ProviderType.GitHub;
+    private bool isProviderBusy;
+    private bool isStorageBusy;
+    private bool isScheduleBusy;
+    private string? providerError;
+    private string? storageError;
+    private string? scheduleError;
+
+    private string providerBaseUrl = string.Empty;
+    private string providerUsername = string.Empty;
+    private string providerApiKey = string.Empty;
+
+    private string storageEndpoint = string.Empty;
+    private string storageRegion = string.Empty;
+    private string storageBucket = string.Empty;
+    private string storageAccessKey = string.Empty;
+    private string storageSecretKey = string.Empty;
+    private bool storageUsePathStyle;
+
+    private bool scheduleEnabled;
+    private string scheduleCron = DefaultCronExpression;
+
+    private const string DefaultCronExpression = "0 0 * * *";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        providers = await Api.GetProvidersAsync();
+        ApplyProviderSelection();
+
+        var storage = await Api.GetStorageAsync();
+        if (storage?.Config is not null)
+        {
+            storageEndpoint = storage.Config.Endpoint;
+            storageRegion = storage.Config.Region;
+            storageBucket = storage.Config.Bucket;
+            storageAccessKey = storage.Config.AccessKeyId;
+            storageSecretKey = storage.Config.SecretAccessKey;
+            storageUsePathStyle = storage.Config.UsePathStyle;
+        }
+
+        var schedule = await Api.GetBackupScheduleAsync();
+        if (schedule is not null)
+        {
+            scheduleEnabled = schedule.IsEnabled;
+            scheduleCron = schedule.CronExpression;
+        }
+    }
+
+    private void ApplyProviderSelection()
+    {
+        var provider = providers.FirstOrDefault(p => p.Provider == selectedProvider);
+        if (provider is null)
+        {
+            providerBaseUrl = selectedProvider switch
+            {
+                ProviderType.GitHub => "https://github.com",
+                ProviderType.GitLab => "https://gitlab.com",
+                ProviderType.Forgejo => "https://codeberg.org",
+                _ => string.Empty
+            };
+            providerUsername = string.Empty;
+            providerApiKey = string.Empty;
+            return;
+        }
+
+        providerBaseUrl = provider.BaseUrl;
+        providerUsername = provider.Username;
+        providerApiKey = string.Empty;
+    }
+
+    private Task OnProviderSelectionChanged()
+    {
+        ApplyProviderSelection();
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveProvider()
+    {
+        providerError = null;
+        isProviderBusy = true;
+        try
+        {
+            var result = await Api.SaveProviderAsync(selectedProvider, new ProviderUpsertRequest(providerBaseUrl, providerUsername, providerApiKey));
+            if (!result.Success || result.Data is null)
+            {
+                providerError = result.Error ?? "Unable to verify provider. Check credentials.";
+                return;
+            }
+
+            providers = await Api.GetProvidersAsync();
+            ApplyProviderSelection();
+        }
+        finally
+        {
+            isProviderBusy = false;
+        }
+    }
+
+    private async Task SaveStorage()
+    {
+        storageError = null;
+        isStorageBusy = true;
+        try
+        {
+            var result = await Api.SaveStorageAsync(new S3UpsertRequest(storageEndpoint, storageRegion, storageBucket, storageAccessKey, storageSecretKey, storageUsePathStyle));
+            if (!result.Success || result.Data is null)
+            {
+                storageError = result.Error ?? "Unable to verify S3 settings.";
+            }
+        }
+        finally
+        {
+            isStorageBusy = false;
+        }
+    }
+
+    private async Task SaveSchedule()
+    {
+        scheduleError = null;
+        isScheduleBusy = true;
+        try
+        {
+            var result = await Api.SaveBackupScheduleAsync(new BackupScheduleUpsertRequest(scheduleEnabled, scheduleCron));
+            if (!result.Success || result.Data is null)
+            {
+                scheduleError = result.Error ?? "Unable to save schedule.";
+                return;
+            }
+
+            scheduleEnabled = result.Data.IsEnabled;
+            scheduleCron = result.Data.CronExpression;
+        }
+        finally
+        {
+            isScheduleBusy = false;
+        }
+    }
+}

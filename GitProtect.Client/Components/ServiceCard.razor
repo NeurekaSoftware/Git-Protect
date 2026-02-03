@@ -1,0 +1,13 @@
+<div class="service-card @(IsSelected ? "is-selected" : string.Empty)">
+    <div class="service-card__icon @IconClass" aria-hidden="true">
+        <i class="@Icon"></i>
+    </div>
+    <div class="service-card__title">@Title</div>
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public string IconClass { get; set; } = string.Empty;
+    [Parameter] public string Icon { get; set; } = string.Empty;
+}
