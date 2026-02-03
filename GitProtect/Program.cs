@@ -43,6 +43,25 @@ builder.Services.AddScheduler();
 
 var app = builder.Build();
 
+app.Use((context, next) =>
+{
+    var rawTarget = context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpRequestFeature>()?.RawTarget;
+    if (!string.IsNullOrEmpty(rawTarget)
+        && (rawTarget.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || rawTarget.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+    {
+        if (Uri.TryCreate(rawTarget, UriKind.Absolute, out var uri))
+        {
+            context.Request.Path = uri.AbsolutePath;
+            context.Request.QueryString = string.IsNullOrEmpty(uri.Query)
+                ? QueryString.Empty
+                : new QueryString(uri.Query);
+        }
+    }
+
+    return next();
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
