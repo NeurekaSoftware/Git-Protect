@@ -40,4 +40,4 @@ chown -R "${PUID}:${PGID}" /app /data
 chmod 755 /app
 chmod 775 /data
 
-exec su -s /bin/sh -c "cd /app && dotnet GitProtect.dll" "${APP_USER}"
+exec su -s /bin/sh -c "dotnet /app/GitProtect.dll" "${APP_USER}"
