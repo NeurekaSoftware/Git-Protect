@@ -66,7 +66,7 @@ app.Services.UseScheduler(scheduler =>
         .PreventOverlapping("backup-schedule");
 
     scheduler.Schedule<RetentionPolicyInvoker>()
-        .EveryHour()
+        .Hourly()
         .PreventOverlapping("retention-policy");
 });
 

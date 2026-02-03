@@ -132,7 +132,9 @@ public sealed class S3StorageService
         for (var i = 0; i < keys.Count; i += maxBatchSize)
         {
             var batch = keys.Skip(i).Take(maxBatchSize).ToList();
-            var response = await client.DeleteObjectsAsync(bucket, batch, _ => { }, cancellationToken);
+            var deleteInfos = batch.Select(key =>
+                new Genbox.SimpleS3.Core.Network.Requests.S3Types.S3DeleteInfo(key, null));
+            var response = await client.DeleteObjectsAsync(bucket, deleteInfos, _ => { }, cancellationToken);
             if (!response.IsSuccess)
             {
                 ThrowDetailedError(
