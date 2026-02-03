@@ -340,6 +340,34 @@ public static class ApiEndpoints
             return Results.Ok(new RetentionPolicyDto(policy.IsEnabled, policy.RetentionDays));
         });
 
+        api.MapPost("/retention/prune", async (
+            GitProtectDbContext db,
+            S3StorageService storageService,
+            CancellationToken cancellationToken) =>
+        {
+            var policy = await db.RetentionPolicies.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+            if (policy is null || !policy.IsEnabled)
+            {
+                return Results.BadRequest(new { message = "Retention policy is not enabled." });
+            }
+
+            if (policy.RetentionDays <= 0)
+            {
+                return Results.BadRequest(new { message = "Retention policy retention window is invalid." });
+            }
+
+            var storage = await db.S3Configs.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+            if (storage is null)
+            {
+                return Results.BadRequest(new { message = "Storage is not configured." });
+            }
+
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-policy.RetentionDays);
+            var deleted = await storageService.DeleteBackupsOlderThanAsync(storage, cutoff, cancellationToken);
+
+            return Results.Ok(new RetentionPruneResultDto(deleted, cutoff.UtcDateTime));
+        });
+
         api.MapGet("/dashboard", async (GitProtectDbContext db, CancellationToken cancellationToken) =>
         {
             var total = await db.Repositories.CountAsync(cancellationToken);

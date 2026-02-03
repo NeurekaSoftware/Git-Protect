@@ -87,3 +87,5 @@ public sealed record BackupScheduleUpsertRequest(bool IsEnabled, string CronExpr
 public sealed record RetentionPolicyDto(bool IsEnabled, int RetentionDays);
 
 public sealed record RetentionPolicyUpsertRequest(bool IsEnabled, int RetentionDays);
+
+public sealed record RetentionPruneResultDto(int DeletedCount, DateTime CutoffUtc);

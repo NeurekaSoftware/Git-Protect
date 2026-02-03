@@ -49,6 +49,8 @@ public sealed record RetentionPolicyUpsertRequest(
     bool IsEnabled,
     [property: Range(1, 3650)] int RetentionDays);
 
+public sealed record RetentionPruneResultDto(int DeletedCount, DateTime CutoffUtc);
+
 public sealed record RepositoryDto(
     int Id,
     string Name,

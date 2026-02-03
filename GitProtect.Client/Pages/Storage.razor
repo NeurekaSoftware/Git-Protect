@@ -9,8 +9,23 @@
         <h1 class="page-title">Storage</h1>
         <p class="page-subtitle">S3 capacity, usage, and last verification.</p>
     </div>
-    <button class="button secondary" @onclick="LoadAsync">Refresh</button>
+    <div style="display:flex; gap:12px;">
+        @if (retentionPolicy?.IsEnabled == true)
+        {
+            <button class="button" @onclick="PruneAsync" disabled="@isPruneBusy">Prune</button>
+        }
+        <button class="button secondary" @onclick="LoadAsync" disabled="@isLoading">Refresh</button>
+    </div>
 </div>
+
+@if (!string.IsNullOrWhiteSpace(pruneError))
+{
+    <div class="card" style="margin-bottom: 16px;">@pruneError</div>
+}
+else if (!string.IsNullOrWhiteSpace(pruneMessage))
+{
+    <div class="card" style="margin-bottom: 16px;">@pruneMessage</div>
+}
 
 @if (isLoading)
 {
@@ -62,8 +77,12 @@ else
 
 @code {
     private StorageDetailsDto? storage;
+    private RetentionPolicyDto? retentionPolicy;
     private bool isLoading = true;
+    private bool isPruneBusy;
     private string? error;
+    private string? pruneMessage;
+    private string? pruneError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -73,10 +92,12 @@ else
     private async Task LoadAsync()
     {
         error = null;
+        pruneError = null;
         isLoading = true;
         try
         {
             storage = await Api.GetStorageAsync();
+            retentionPolicy = await Api.GetRetentionPolicyAsync();
         }
         catch (Exception ex)
         {
@@ -85,6 +106,35 @@ else
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task PruneAsync()
+    {
+        pruneMessage = null;
+        pruneError = null;
+        isPruneBusy = true;
+        try
+        {
+            var result = await Api.PruneRetentionAsync();
+            if (result.Success && result.Data is not null)
+            {
+                var localCutoff = result.Data.CutoffUtc.ToLocalTime();
+                pruneMessage = $"Pruned {result.Data.DeletedCount} backup object(s) older than {localCutoff:g}.";
+                await LoadAsync();
+            }
+            else
+            {
+                pruneError = result.Error ?? "Retention prune failed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            pruneError = ex.Message;
+        }
+        finally
+        {
+            isPruneBusy = false;
         }
     }
 

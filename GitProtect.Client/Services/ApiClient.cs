@@ -94,6 +94,12 @@ public sealed class ApiClient
         return await ReadResponseAsync<RetentionPolicyDto>(response, cancellationToken);
     }
 
+    public async Task<ApiResult<RetentionPruneResultDto>> PruneRetentionAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PostAsync("api/retention/prune", null, cancellationToken);
+        return await ReadResponseAsync<RetentionPruneResultDto>(response, cancellationToken);
+    }
+
     public async Task<DashboardDto?> GetDashboardAsync(CancellationToken cancellationToken = default)
         => await _http.GetFromJsonAsync<DashboardDto>("api/dashboard", cancellationToken);
 
