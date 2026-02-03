@@ -1,4 +1,4 @@
-# GitProtect
+# <img src="GitProtect/wwwroot/favicon.png" alt="Git Protect icon" width="28" height="28" /> Git Protect
 
 GitProtect is a self-hosted backup service for Git repositories.
 
@@ -25,5 +25,4 @@ services:
       - ./data:/data
     restart: unless-stopped
 ```
-
 
