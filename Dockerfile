@@ -22,7 +22,7 @@ ENV ASPNETCORE_URLS=http://0.0.0.0:3000 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tzdata \
+    && apt-get install -y --no-install-recommends tzdata git git-lfs \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/publish/ /app/
