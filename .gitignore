@@ -1,5 +1,6 @@
 .dotnet/
 bin/
+bin\\Debug
 obj/
 *.db
 *.db-shm

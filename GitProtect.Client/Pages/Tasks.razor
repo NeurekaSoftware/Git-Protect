@@ -127,7 +127,7 @@ else
 
         try
         {
-            tasks = await Api.GetTasksAsync(cancellationToken);
+            tasks = await Api.GetTasksAsync(limit: 200, cancellationToken);
             error = null;
         }
         catch (Exception ex)

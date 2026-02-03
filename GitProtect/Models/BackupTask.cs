@@ -8,8 +8,8 @@ public sealed class BackupTask
     public string Name { get; set; } = string.Empty;
     public BackupTaskStatus Status { get; set; } = BackupTaskStatus.Pending;
     public int Progress { get; set; }
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
-    public DateTimeOffset? StartedAt { get; set; }
-    public DateTimeOffset? CompletedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public string? Message { get; set; }
 }

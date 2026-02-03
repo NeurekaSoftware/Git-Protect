@@ -9,6 +9,6 @@ public sealed class ProviderConfig
     public string ApiToken { get; set; } = string.Empty;
     public bool IsConfigured { get; set; }
     public bool IsVerified { get; set; }
-    public DateTimeOffset? VerifiedAt { get; set; }
-    public DateTimeOffset? LastSyncAt { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public DateTime? LastSyncAt { get; set; }
 }

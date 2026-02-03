@@ -152,7 +152,7 @@ else
         {
             var providers = await Api.GetProvidersAsync(cancellationToken);
             provider = providers.FirstOrDefault(p => p.Provider == Provider);
-            tasks = await Api.GetTasksAsync(cancellationToken);
+            tasks = await Api.GetTasksAsync(limit: 200, cancellationToken);
             if (provider?.IsVerified == true)
             {
                 repositories = await Api.GetReposAsync(Provider, cancellationToken);

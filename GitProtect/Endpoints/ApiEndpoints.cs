@@ -53,7 +53,7 @@ public static class ApiEndpoints
 
             var isValid = await providerApi.ValidateAsync(config, cancellationToken);
             config.IsVerified = isValid;
-            config.VerifiedAt = isValid ? DateTimeOffset.UtcNow : null;
+            config.VerifiedAt = isValid ? DateTime.UtcNow : null;
 
             await db.SaveChangesAsync(cancellationToken);
 
@@ -116,7 +116,7 @@ public static class ApiEndpoints
                 db.Repositories.Remove(repo);
             }
 
-            config.LastSyncAt = DateTimeOffset.UtcNow;
+            config.LastSyncAt = DateTime.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
 
             return Results.Ok(new { count = remoteRepos.Count });
@@ -208,13 +208,20 @@ public static class ApiEndpoints
             return Results.Ok(ToTaskDto(task));
         });
 
-        api.MapGet("/tasks", async (GitProtectDbContext db, CancellationToken cancellationToken) =>
+        api.MapGet("/tasks", async (int? limit, GitProtectDbContext db, CancellationToken cancellationToken) =>
         {
-            var tasks = await db.BackupTasks.AsNoTracking().ToListAsync(cancellationToken);
-            return tasks
-                .OrderByDescending(t => t.CreatedAt)
-                .Select(ToTaskDto)
-                .ToList();
+            IQueryable<BackupTask> query = db.BackupTasks
+                .AsNoTracking()
+                .OrderByDescending(t => t.Id);
+
+            if (limit.HasValue)
+            {
+                var safeLimit = Math.Clamp(limit.Value, 1, 1000);
+                query = query.Take(safeLimit);
+            }
+
+            var tasks = await query.ToListAsync(cancellationToken);
+            return tasks.Select(ToTaskDto).ToList();
         });
 
         api.MapGet("/storage", async (GitProtectDbContext db, CancellationToken cancellationToken) =>
@@ -253,7 +260,7 @@ public static class ApiEndpoints
             {
                 await storageService.VerifyAsync(config, cancellationToken);
                 config.IsVerified = true;
-                config.VerifiedAt = DateTimeOffset.UtcNow;
+                config.VerifiedAt = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
@@ -310,15 +317,17 @@ public static class ApiEndpoints
             var completed = await db.BackupTasks
                 .AsNoTracking()
                 .Where(t => t.CompletedAt != null)
+                .OrderByDescending(t => t.Id)
                 .Select(t => t.CompletedAt)
+                .Take(2000)
                 .ToListAsync(cancellationToken);
             var activity = new List<ChartPointDto>();
             for (var i = 0; i < 7; i++)
             {
                 var day = start.AddDays(i);
                 var next = day.AddDays(1);
-                var dayStart = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-                var nextStart = new DateTimeOffset(next.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+                var dayStart = DateTime.SpecifyKind(day.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+                var nextStart = DateTime.SpecifyKind(next.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
 
                 var count = completed.Count(t => t.HasValue && t.Value >= dayStart && t.Value < nextStart);
 

@@ -34,7 +34,7 @@ public static class CronExpressionValidator
         return true;
     }
 
-    public static bool IsDue(string expression, DateTimeOffset now)
+    public static bool IsDue(string expression, DateTime now)
     {
         if (!TryValidate(expression, out _))
         {

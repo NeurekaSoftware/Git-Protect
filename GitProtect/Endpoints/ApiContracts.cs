@@ -15,8 +15,8 @@ public sealed record ProviderStatusDto(
     string Username,
     bool IsConfigured,
     bool IsVerified,
-    DateTimeOffset? VerifiedAt,
-    DateTimeOffset? LastSyncAt);
+    DateTime? VerifiedAt,
+    DateTime? LastSyncAt);
 
 public sealed record ProviderUpsertRequest(string BaseUrl, string Username, string ApiToken);
 
@@ -28,12 +28,12 @@ public sealed record S3ConfigDto(
     string SecretAccessKey,
     bool UsePathStyle,
     bool IsVerified,
-    DateTimeOffset? VerifiedAt);
+    DateTime? VerifiedAt);
 
 public sealed record StorageDetailsDto(
     S3ConfigDto? Config,
     long TotalBytes,
-    DateTimeOffset? LastVerifiedAt);
+    DateTime? LastVerifiedAt);
 
 public sealed record S3UpsertRequest(string Endpoint, string Region, string Bucket, string AccessKeyId, string SecretAccessKey, bool UsePathStyle);
 
@@ -48,7 +48,7 @@ public sealed record RepositoryDto(
     string Name,
     string FullName,
     BackupStatus Status,
-    DateTimeOffset? LastBackupAt,
+    DateTime? LastBackupAt,
     long? LastBackupSizeBytes,
     string? LastBackupMessage);
 
@@ -59,9 +59,9 @@ public sealed record BackupTaskDto(
     int? RepositoryId,
     BackupTaskStatus Status,
     int Progress,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset? StartedAt,
-    DateTimeOffset? CompletedAt,
+    DateTime CreatedAt,
+    DateTime? StartedAt,
+    DateTime? CompletedAt,
     string? Message);
 
 public sealed record DashboardDto(
@@ -77,4 +77,4 @@ public sealed record StorageSummaryDto(
     string Bucket,
     string Region,
     long TotalBytes,
-    DateTimeOffset? LastVerifiedAt);
+    DateTime? LastVerifiedAt);

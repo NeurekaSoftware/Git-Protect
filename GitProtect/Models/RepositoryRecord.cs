@@ -10,7 +10,7 @@ public sealed class RepositoryRecord
     public string CloneUrl { get; set; } = string.Empty;
     public string? DefaultBranch { get; set; }
     public BackupStatus LastBackupStatus { get; set; } = BackupStatus.Never;
-    public DateTimeOffset? LastBackupAt { get; set; }
+    public DateTime? LastBackupAt { get; set; }
     public string? LastBackupMessage { get; set; }
     public long? LastBackupSizeBytes { get; set; }
 }

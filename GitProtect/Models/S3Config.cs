@@ -10,5 +10,5 @@ public sealed class S3Config
     public string SecretAccessKey { get; set; } = string.Empty;
     public bool UsePathStyle { get; set; }
     public bool IsVerified { get; set; }
-    public DateTimeOffset? VerifiedAt { get; set; }
+    public DateTime? VerifiedAt { get; set; }
 }

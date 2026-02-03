@@ -28,20 +28,20 @@ public sealed class BackupService
         var repos = await _db.Repositories.Where(r => r.Provider == provider).ToListAsync(cancellationToken);
 
         task.Status = BackupTaskStatus.Running;
-        task.StartedAt = DateTimeOffset.UtcNow;
+        task.StartedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
         if (repos.Count == 0)
         {
             task.Status = BackupTaskStatus.Success;
             task.Progress = 100;
-            task.CompletedAt = DateTimeOffset.UtcNow;
+            task.CompletedAt = DateTime.UtcNow;
             task.Message = "No repositories to back up.";
             await _db.SaveChangesAsync(cancellationToken);
             return;
         }
 
-        var runTimestamp = DateTimeOffset.UtcNow;
+        var runTimestamp = DateTime.UtcNow;
         var runId = Guid.CreateVersion7();
         var prefixRoot = BuildPrefixRoot(runTimestamp, runId);
         var failures = 0;
@@ -59,7 +59,7 @@ public sealed class BackupService
                 var sizeBytes = await _storageService.UploadDirectoryAsync(storage, mirrorResult.Path, keyPrefix, cancellationToken);
 
                 repo.LastBackupStatus = BackupStatus.Success;
-                repo.LastBackupAt = DateTimeOffset.UtcNow;
+                repo.LastBackupAt = DateTime.UtcNow;
                 repo.LastBackupSizeBytes = sizeBytes;
                 repo.LastBackupMessage = null;
             }
@@ -67,7 +67,7 @@ public sealed class BackupService
             {
                 failures++;
                 repo.LastBackupStatus = BackupStatus.Failed;
-                repo.LastBackupAt = DateTimeOffset.UtcNow;
+                repo.LastBackupAt = DateTime.UtcNow;
                 repo.LastBackupMessage = ex.Message;
                 _logger.LogError(ex, "Backup failed for {Repo}", repo.FullName);
             }
@@ -77,7 +77,7 @@ public sealed class BackupService
         }
 
         task.Status = failures == 0 ? BackupTaskStatus.Success : BackupTaskStatus.Failed;
-        task.CompletedAt = DateTimeOffset.UtcNow;
+        task.CompletedAt = DateTime.UtcNow;
         task.Message = failures == 0 ? "Completed" : $"{failures} repo(s) failed";
         await _db.SaveChangesAsync(cancellationToken);
     }
@@ -90,7 +90,7 @@ public sealed class BackupService
         var storage = await _db.S3Configs.FirstAsync(cancellationToken);
 
         task.Status = BackupTaskStatus.Running;
-        task.StartedAt = DateTimeOffset.UtcNow;
+        task.StartedAt = DateTime.UtcNow;
         task.Progress = 0;
         repo.LastBackupStatus = BackupStatus.Running;
         repo.LastBackupMessage = null;
@@ -98,7 +98,7 @@ public sealed class BackupService
 
         try
         {
-            var runTimestamp = DateTimeOffset.UtcNow;
+        var runTimestamp = DateTime.UtcNow;
             var runId = Guid.CreateVersion7();
             var prefixRoot = BuildPrefixRoot(runTimestamp, runId);
             var mirrorResult = await _gitMirrorService.CreateOrUpdateMirrorAsync(providerConfig, repo, cancellationToken);
@@ -106,23 +106,23 @@ public sealed class BackupService
             var sizeBytes = await _storageService.UploadDirectoryAsync(storage, mirrorResult.Path, keyPrefix, cancellationToken);
 
             repo.LastBackupStatus = BackupStatus.Success;
-            repo.LastBackupAt = DateTimeOffset.UtcNow;
+            repo.LastBackupAt = DateTime.UtcNow;
             repo.LastBackupSizeBytes = sizeBytes;
             repo.LastBackupMessage = null;
 
             task.Progress = 100;
             task.Status = BackupTaskStatus.Success;
-            task.CompletedAt = DateTimeOffset.UtcNow;
+            task.CompletedAt = DateTime.UtcNow;
             task.Message = "Completed";
         }
         catch (Exception ex)
         {
             repo.LastBackupStatus = BackupStatus.Failed;
-            repo.LastBackupAt = DateTimeOffset.UtcNow;
+            repo.LastBackupAt = DateTime.UtcNow;
             repo.LastBackupMessage = ex.Message;
 
             task.Status = BackupTaskStatus.Failed;
-            task.CompletedAt = DateTimeOffset.UtcNow;
+            task.CompletedAt = DateTime.UtcNow;
             task.Message = ex.Message;
         }
 
@@ -138,12 +138,12 @@ public sealed class BackupService
         }
 
         task.Status = BackupTaskStatus.Failed;
-        task.CompletedAt = DateTimeOffset.UtcNow;
+        task.CompletedAt = DateTime.UtcNow;
         task.Message = message;
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private static string BuildPrefixRoot(DateTimeOffset timestamp, Guid runId)
+    private static string BuildPrefixRoot(DateTime timestamp, Guid runId)
     {
         return $"{timestamp:yyyy/MM}/{runId}/";
     }

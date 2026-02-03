@@ -61,8 +61,11 @@ public sealed class ApiClient
         return await response.Content.ReadFromJsonAsync<BackupTaskDto>(cancellationToken: cancellationToken);
     }
 
-    public async Task<List<BackupTaskDto>> GetTasksAsync(CancellationToken cancellationToken = default)
-        => await _http.GetFromJsonAsync<List<BackupTaskDto>>("api/tasks", cancellationToken) ?? new();
+    public async Task<List<BackupTaskDto>> GetTasksAsync(int? limit = null, CancellationToken cancellationToken = default)
+    {
+        var url = limit.HasValue ? $"api/tasks?limit={limit.Value}" : "api/tasks";
+        return await _http.GetFromJsonAsync<List<BackupTaskDto>>(url, cancellationToken) ?? new();
+    }
 
     public async Task<StorageDetailsDto?> GetStorageAsync(CancellationToken cancellationToken = default)
         => await _http.GetFromJsonAsync<StorageDetailsDto>("api/storage", cancellationToken);

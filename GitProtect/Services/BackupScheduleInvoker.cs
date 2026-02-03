@@ -27,7 +27,7 @@ public sealed class BackupScheduleInvoker : IInvocable
             return;
         }
 
-        var now = DateTimeOffset.Now;
+        var now = DateTime.Now;
         if (!CronExpressionValidator.IsDue(schedule.CronExpression, now))
         {
             return;
