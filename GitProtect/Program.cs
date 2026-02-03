@@ -38,6 +38,25 @@ builder.Services.AddScheduler();
 
 var app = builder.Build();
 
+app.Use((context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (!string.IsNullOrEmpty(path)
+        && (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+    {
+        if (Uri.TryCreate(path, UriKind.Absolute, out var uri))
+        {
+            context.Request.Path = uri.AbsolutePath;
+            context.Request.QueryString = string.IsNullOrEmpty(uri.Query)
+                ? QueryString.Empty
+                : new QueryString(uri.Query);
+        }
+    }
+
+    return next();
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
