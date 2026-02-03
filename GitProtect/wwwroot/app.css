@@ -319,6 +319,12 @@ a {
     letter-spacing: 0.05em;
 }
 
+.badge.small {
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+}
+
 .badge.success {
     background: rgba(50, 213, 131, 0.15);
     color: var(--success);
