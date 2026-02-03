@@ -12,6 +12,7 @@ public sealed class GitProtectDbContext : DbContext
     public DbSet<ProviderConfig> ProviderConfigs => Set<ProviderConfig>();
     public DbSet<S3Config> S3Configs => Set<S3Config>();
     public DbSet<BackupSchedule> BackupSchedules => Set<BackupSchedule>();
+    public DbSet<RetentionPolicy> RetentionPolicies => Set<RetentionPolicy>();
     public DbSet<RepositoryRecord> Repositories => Set<RepositoryRecord>();
     public DbSet<BackupTask> BackupTasks => Set<BackupTask>();
 

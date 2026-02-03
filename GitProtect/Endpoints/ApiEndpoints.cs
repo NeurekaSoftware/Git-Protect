@@ -9,6 +9,8 @@ namespace GitProtect.Endpoints;
 
 public static class ApiEndpoints
 {
+    private const int DefaultRetentionDays = 30;
+
     public static IEndpointRouteBuilder MapGitProtectApi(this IEndpointRouteBuilder app)
     {
         var api = app.MapGroup("/api");
@@ -304,6 +306,38 @@ public static class ApiEndpoints
             await db.SaveChangesAsync(cancellationToken);
 
             return Results.Ok(new BackupScheduleDto(schedule.IsEnabled, schedule.CronExpression));
+        });
+
+        api.MapGet("/retention", async (GitProtectDbContext db, CancellationToken cancellationToken) =>
+        {
+            var policy = await db.RetentionPolicies.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
+            return policy is null
+                ? new RetentionPolicyDto(false, DefaultRetentionDays)
+                : new RetentionPolicyDto(policy.IsEnabled, policy.RetentionDays);
+        });
+
+        api.MapPut("/retention", async (
+            RetentionPolicyUpsertRequest request,
+            GitProtectDbContext db,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryValidate(request, out var error))
+            {
+                return Results.BadRequest(new { message = error ?? "Invalid retention settings." });
+            }
+
+            var policy = await db.RetentionPolicies.FirstOrDefaultAsync(cancellationToken) ?? new RetentionPolicy();
+            policy.IsEnabled = request.IsEnabled;
+            policy.RetentionDays = request.RetentionDays;
+
+            if (policy.Id == 0)
+            {
+                db.RetentionPolicies.Add(policy);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+
+            return Results.Ok(new RetentionPolicyDto(policy.IsEnabled, policy.RetentionDays));
         });
 
         api.MapGet("/dashboard", async (GitProtectDbContext db, CancellationToken cancellationToken) =>

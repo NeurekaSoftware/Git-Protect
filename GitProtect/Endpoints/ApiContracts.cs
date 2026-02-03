@@ -43,6 +43,12 @@ public sealed record BackupScheduleUpsertRequest(
     bool IsEnabled,
     [property: Required, CronExpression] string CronExpression);
 
+public sealed record RetentionPolicyDto(bool IsEnabled, int RetentionDays);
+
+public sealed record RetentionPolicyUpsertRequest(
+    bool IsEnabled,
+    [property: Range(1, 3650)] int RetentionDays);
+
 public sealed record RepositoryDto(
     int Id,
     string Name,

@@ -83,3 +83,7 @@ public sealed record ChartPointDto(string Label, int Value);
 public sealed record BackupScheduleDto(bool IsEnabled, string CronExpression);
 
 public sealed record BackupScheduleUpsertRequest(bool IsEnabled, string CronExpression);
+
+public sealed record RetentionPolicyDto(bool IsEnabled, int RetentionDays);
+
+public sealed record RetentionPolicyUpsertRequest(bool IsEnabled, int RetentionDays);

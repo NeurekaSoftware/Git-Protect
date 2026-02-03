@@ -34,6 +34,7 @@ builder.Services.AddScoped<BackupService>();
 builder.Services.AddSingleton<BackupQueue>();
 builder.Services.AddHostedService<BackupWorker>();
 builder.Services.AddScoped<BackupScheduleInvoker>();
+builder.Services.AddScoped<RetentionPolicyInvoker>();
 builder.Services.AddScheduler();
 
 var app = builder.Build();
@@ -63,6 +64,10 @@ app.Services.UseScheduler(scheduler =>
     scheduler.Schedule<BackupScheduleInvoker>()
         .EveryMinute()
         .PreventOverlapping("backup-schedule");
+
+    scheduler.Schedule<RetentionPolicyInvoker>()
+        .EveryHour()
+        .PreventOverlapping("retention-policy");
 });
 
 using (var scope = app.Services.CreateScope())

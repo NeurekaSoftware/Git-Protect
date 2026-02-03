@@ -3,6 +3,7 @@ using Genbox.SimpleS3.Extensions.GenericS3;
 using Genbox.SimpleS3.GenericS3;
 using Genbox.SimpleS3.ProviderBase;
 using GitProtect.Models;
+using System.Linq;
 
 namespace GitProtect.Services;
 
@@ -48,6 +49,62 @@ public sealed class S3StorageService
             response.ResponseId);
     }
 
+    public async Task<int> DeleteBackupsOlderThanAsync(S3Config config, DateTimeOffset cutoff, CancellationToken cancellationToken)
+    {
+        using var client = CreateClient(config);
+        var deletedCount = 0;
+        string? continuationToken = null;
+
+        do
+        {
+            var response = await client.ListObjectsAsync(config.Bucket, request =>
+            {
+                request.MaxKeys = 1000;
+                if (!string.IsNullOrWhiteSpace(continuationToken))
+                {
+                    request.ContinuationToken = continuationToken;
+                }
+            }, cancellationToken);
+
+            if (!response.IsSuccess)
+            {
+                ThrowDetailedError(
+                    "Unable to list objects for retention cleanup.",
+                    response.StatusCode,
+                    response.Error?.GetErrorDetails(),
+                    response.Error?.Message,
+                    response.RequestId,
+                    response.ResponseId);
+            }
+
+            var candidates = new List<string>();
+            if (response.Objects is not null)
+            {
+                foreach (var obj in response.Objects)
+                {
+                    if (obj is null || !IsBackupObjectKey(obj.ObjectKey))
+                    {
+                        continue;
+                    }
+
+                    if (obj.LastModifiedOn < cutoff)
+                    {
+                        candidates.Add(obj.ObjectKey);
+                    }
+                }
+            }
+
+            if (candidates.Count > 0)
+            {
+                deletedCount += await DeleteKeysAsync(client, config.Bucket, candidates, cancellationToken);
+            }
+
+            continuationToken = response.IsTruncated ? response.NextContinuationToken : null;
+        } while (!string.IsNullOrWhiteSpace(continuationToken));
+
+        return deletedCount;
+    }
+
     private static void ThrowDetailedError(string summary, int statusCode, string? errorDetails, string? errorMessage, string? requestId, string? responseId)
     {
         if (string.IsNullOrWhiteSpace(errorDetails))
@@ -65,6 +122,65 @@ public sealed class S3StorageService
         }
 
         throw new InvalidOperationException($"{summary} {details}");
+    }
+
+    private static async Task<int> DeleteKeysAsync(GenericS3Client client, string bucket, List<string> keys, CancellationToken cancellationToken)
+    {
+        var deleted = 0;
+        const int maxBatchSize = 1000;
+
+        for (var i = 0; i < keys.Count; i += maxBatchSize)
+        {
+            var batch = keys.Skip(i).Take(maxBatchSize).ToList();
+            var response = await client.DeleteObjectsAsync(bucket, batch, _ => { }, cancellationToken);
+            if (!response.IsSuccess)
+            {
+                ThrowDetailedError(
+                    "Unable to delete objects for retention cleanup.",
+                    response.StatusCode,
+                    response.Error?.GetErrorDetails(),
+                    response.Error?.Message,
+                    response.RequestId,
+                    response.ResponseId);
+            }
+
+            if (response.Errors is { Count: > 0 })
+            {
+                var failed = response.Errors.Select(e => e.ObjectKey).Where(k => !string.IsNullOrWhiteSpace(k)).ToHashSet();
+                deleted += batch.Count - failed.Count;
+            }
+            else
+            {
+                deleted += batch.Count;
+            }
+        }
+
+        return deleted;
+    }
+
+    private static bool IsBackupObjectKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key) || key.Length < 8)
+        {
+            return false;
+        }
+
+        if (key[4] != '/' || key[7] != '/')
+        {
+            return false;
+        }
+
+        if (!int.TryParse(key.AsSpan(0, 4), out var year) || year < 2000 || year > 2100)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(key.AsSpan(5, 2), out var month) || month < 1 || month > 12)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     public async Task<long> UploadDirectoryAsync(S3Config config, string sourcePath, string prefix, CancellationToken cancellationToken)

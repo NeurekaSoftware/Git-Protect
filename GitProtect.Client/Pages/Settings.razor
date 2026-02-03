@@ -108,15 +108,41 @@
     </div>
 </div>
 
+<div class="card" style="margin-top: 24px;">
+    <p class="card-title">Retention Policy</p>
+    @if (!string.IsNullOrWhiteSpace(retentionError))
+    {
+        <div class="empty-state">@retentionError</div>
+    }
+    <div class="form-grid">
+        <div class="form-group">
+            <label class="label">Enabled</label>
+            <label class="checkbox-row">
+                <input type="checkbox" class="checkbox" @bind="retentionEnabled" />
+                Delete backups older than
+            </label>
+        </div>
+        <div class="form-group">
+            <label class="label">Retention Days</label>
+            <input class="input" type="number" min="1" max="3650" step="1" @bind="retentionDays" disabled="@(!retentionEnabled)" />
+        </div>
+    </div>
+    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
+        <button class="button" @onclick="SaveRetention" disabled="@isRetentionBusy">Save Retention</button>
+    </div>
+</div>
+
 @code {
     private List<ProviderStatusDto> providers = new();
     private ProviderType selectedProvider = ProviderType.GitHub;
     private bool isProviderBusy;
     private bool isStorageBusy;
     private bool isScheduleBusy;
+    private bool isRetentionBusy;
     private string? providerError;
     private string? storageError;
     private string? scheduleError;
+    private string? retentionError;
 
     private string providerBaseUrl = string.Empty;
     private string providerUsername = string.Empty;
@@ -133,6 +159,10 @@
     private string scheduleCron = DefaultCronExpression;
 
     private const string DefaultCronExpression = "0 0 * * *";
+    private const int DefaultRetentionDays = 30;
+
+    private bool retentionEnabled;
+    private int retentionDays = DefaultRetentionDays;
 
     protected override async Task OnInitializedAsync()
     {
@@ -160,6 +190,13 @@
         {
             scheduleEnabled = schedule.IsEnabled;
             scheduleCron = schedule.CronExpression;
+        }
+
+        var retention = await Api.GetRetentionPolicyAsync();
+        if (retention is not null)
+        {
+            retentionEnabled = retention.IsEnabled;
+            retentionDays = retention.RetentionDays;
         }
     }
 
@@ -250,6 +287,28 @@
         finally
         {
             isScheduleBusy = false;
+        }
+    }
+
+    private async Task SaveRetention()
+    {
+        retentionError = null;
+        isRetentionBusy = true;
+        try
+        {
+            var result = await Api.SaveRetentionPolicyAsync(new RetentionPolicyUpsertRequest(retentionEnabled, retentionDays));
+            if (!result.Success || result.Data is null)
+            {
+                retentionError = result.Error ?? "Unable to save retention policy.";
+                return;
+            }
+
+            retentionEnabled = result.Data.IsEnabled;
+            retentionDays = result.Data.RetentionDays;
+        }
+        finally
+        {
+            isRetentionBusy = false;
         }
     }
 }

@@ -85,6 +85,15 @@ public sealed class ApiClient
         return await ReadResponseAsync<BackupScheduleDto>(response, cancellationToken);
     }
 
+    public async Task<RetentionPolicyDto?> GetRetentionPolicyAsync(CancellationToken cancellationToken = default)
+        => await _http.GetFromJsonAsync<RetentionPolicyDto>("api/retention", cancellationToken);
+
+    public async Task<ApiResult<RetentionPolicyDto>> SaveRetentionPolicyAsync(RetentionPolicyUpsertRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _http.PutAsJsonAsync("api/retention", request, cancellationToken);
+        return await ReadResponseAsync<RetentionPolicyDto>(response, cancellationToken);
+    }
+
     public async Task<DashboardDto?> GetDashboardAsync(CancellationToken cancellationToken = default)
         => await _http.GetFromJsonAsync<DashboardDto>("api/dashboard", cancellationToken);
 
