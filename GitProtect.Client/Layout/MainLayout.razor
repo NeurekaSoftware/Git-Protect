@@ -1,26 +1,104 @@
 @inherits LayoutComponentBase
 
-<Card>
-    <CardHeader>
-        <CardTitle>GitProtect</CardTitle>
-        <CardDescription>Backup Operations Console</CardDescription>
-    </CardHeader>
-    <CardContent>
-        <div>
-            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/")'>Dashboard</Button>
-            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/backups")'>Backups</Button>
-            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/storage")'>Storage</Button>
-            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/tasks")'>Tasks</Button>
-            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/settings")'>Settings</Button>
-            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/setup")'>Setup</Button>
-        </div>
-    </CardContent>
-</Card>
+<SidebarProvider>
+    <Sidebar>
+        <SidebarHeader>
+            <div class="flex items-center gap-2 px-2 h-10">
+                <div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                    <LucideIcon Name="shield" class="h-4 w-4" />
+                </div>
+                <span class="text-sm font-semibold">GitProtect</span>
+            </div>
+        </SidebarHeader>
 
-<Separator />
+        <SidebarContent>
+            <SidebarGroup>
+                <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+                <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton Href="/" IsActive="@(IsActive("/"))">
+                            <LucideIcon Name="layout-dashboard" class="h-4 w-4" />
+                            <span>Dashboard</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton Href="/backups" IsActive="@(IsActive("/backups"))">
+                            <LucideIcon Name="database-backup" class="h-4 w-4" />
+                            <span>Backups</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton Href="/storage" IsActive="@(IsActive("/storage"))">
+                            <LucideIcon Name="hard-drive" class="h-4 w-4" />
+                            <span>Storage</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton Href="/tasks" IsActive="@(IsActive("/tasks"))">
+                            <LucideIcon Name="list-checks" class="h-4 w-4" />
+                            <span>Tasks</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton Href="/settings" IsActive="@(IsActive("/settings"))">
+                            <LucideIcon Name="settings" class="h-4 w-4" />
+                            <span>Settings</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton Href="/setup" IsActive="@(IsActive("/setup"))">
+                            <LucideIcon Name="wrench" class="h-4 w-4" />
+                            <span>Setup</span>
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                </SidebarMenu>
+            </SidebarGroup>
+        </SidebarContent>
 
-@Body
+        <SidebarFooter>
+            <DropdownMenu>
+                <DropdownMenuTrigger>
+                    <Button Variant="ButtonVariant.Ghost" Class="w-full justify-start gap-2 px-2 h-10">
+                        <Avatar Size="AvatarSize.Small">
+                            <AvatarFallback>GP</AvatarFallback>
+                        </Avatar>
+                        <div class="flex flex-col items-start text-left flex-1 min-w-0">
+                            <span class="text-sm font-medium truncate">GitProtect</span>
+                            <span class="text-xs text-muted-foreground truncate">Backup Console</span>
+                        </div>
+                        <LucideIcon Name="chevrons-up-down" class="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent Side="PopoverSide.Top" Align="PopoverAlign.Start" MatchTriggerWidth="true">
+                    <DropdownMenuLabel>System Status</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem>Online</DropdownMenuItem>
+                    <DropdownMenuItem>All systems available</DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </SidebarFooter>
+    </Sidebar>
+
+    <SidebarInset>
+        @Body
+    </SidebarInset>
+</SidebarProvider>
 
 @code {
     [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private bool IsActive(string href)
+    {
+        var relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            relativePath = "/";
+        }
+
+        var normalizedPath = relativePath.StartsWith('/') ? relativePath : $"/{relativePath}";
+
+        return href == "/"
+            ? normalizedPath == "/"
+            : normalizedPath.StartsWith(href, StringComparison.OrdinalIgnoreCase);
+    }
 }
