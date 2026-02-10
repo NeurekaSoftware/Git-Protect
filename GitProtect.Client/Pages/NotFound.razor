@@ -9,6 +9,10 @@
         <CardDescription>The page you are looking for does not exist.</CardDescription>
     </CardHeader>
     <CardContent>
-        <Button><a href="/">Back to Dashboard</a></Button>
+        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/")'>Back to Dashboard</Button>
     </CardContent>
 </Card>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+}
