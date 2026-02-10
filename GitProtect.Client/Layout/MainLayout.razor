@@ -3,17 +3,20 @@
 <SidebarProvider>
     <Sidebar>
         <SidebarHeader>
-            <div class="flex items-center gap-2 px-2 h-10">
-                <div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <div class="flex items-center gap-3 px-2 h-12">
+                <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                     <LucideIcon Name="shield" class="h-4 w-4" />
                 </div>
-                <span class="text-sm font-semibold">GitProtect</span>
+                <div class="flex flex-col">
+                    <span class="text-sm font-semibold">GitProtect</span>
+                    <span class="text-xs text-muted-foreground">Backup Console</span>
+                </div>
             </div>
         </SidebarHeader>
 
         <SidebarContent>
             <SidebarGroup>
-                <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+                <SidebarGroupLabel>Workspace</SidebarGroupLabel>
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton Href="/" IsActive="@(IsActive("/"))">
@@ -64,7 +67,7 @@
                         </Avatar>
                         <div class="flex flex-col items-start text-left flex-1 min-w-0">
                             <span class="text-sm font-medium truncate">GitProtect</span>
-                            <span class="text-xs text-muted-foreground truncate">Backup Console</span>
+                            <span class="text-xs text-muted-foreground truncate">Production ready</span>
                         </div>
                         <LucideIcon Name="chevrons-up-down" class="h-4 w-4 text-muted-foreground" />
                     </Button>
@@ -73,14 +76,16 @@
                     <DropdownMenuLabel>System Status</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem>Online</DropdownMenuItem>
-                    <DropdownMenuItem>All systems available</DropdownMenuItem>
+                    <DropdownMenuItem>Monitoring active</DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
         </SidebarFooter>
     </Sidebar>
 
     <SidebarInset>
-        @Body
+        <div class="p-4 md:p-6">
+            @Body
+        </div>
     </SidebarInset>
 </SidebarProvider>
 

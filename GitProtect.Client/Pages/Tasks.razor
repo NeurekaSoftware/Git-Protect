@@ -5,58 +5,71 @@
 
 <PageTitle>Tasks</PageTitle>
 
-<Card>
-    <CardHeader>
-        <CardTitle>Tasks</CardTitle>
-        <CardDescription>Current and recent backup runs.</CardDescription>
-    </CardHeader>
-</Card>
-
-<Separator />
-
-@if (isLoading)
-{
-    <Card><CardContent>Loading tasks...</CardContent></Card>
-}
-else if (!string.IsNullOrWhiteSpace(error))
-{
-    <Card><CardContent>@error</CardContent></Card>
-}
-else if (tasks.Count == 0)
-{
-    <Card><CardContent>No tasks yet.</CardContent></Card>
-}
-else
-{
+<div class="space-y-6">
     <Card>
-        <CardContent>
-            <table>
-                <thead><tr><th>Task</th><th>Status</th><th>Type</th><th>Progress</th><th>Started</th></tr></thead>
-                <tbody>
-                    @foreach (var task in tasks)
-                    {
-                        <tr>
-                            <td>@task.Name</td>
-                            <td>
-                                @if (task.Status == BackupTaskStatus.Failed)
-                                {
-                                    <Badge Variant="BadgeVariant.Destructive">Failed: @(string.IsNullOrWhiteSpace(task.Message) ? "No details" : task.Message)</Badge>
-                                }
-                                else
-                                {
-                                    @GetStatusBadge(task.Status)
-                                }
-                            </td>
-                            <td>@GetTriggerBadge(task.Trigger)</td>
-                            <td>@task.Progress%</td>
-                            <td>@(task.StartedAt?.ToLocalTime().ToString("g") ?? "-")</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </CardContent>
+        <CardHeader>
+            <div>
+                <CardTitle>Task Activity</CardTitle>
+                <CardDescription>Current and recent provider backup jobs.</CardDescription>
+            </div>
+            <Button Variant="ButtonVariant.Secondary" @onclick="() => LoadAsync(showLoading: true)" Disabled="@isLoading">Refresh</Button>
+        </CardHeader>
     </Card>
-}
+
+    @if (isLoading)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">Loading tasks...</CardContent></Card>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <Card><CardContent class="py-6"><Badge Variant="BadgeVariant.Destructive">@error</Badge></CardContent></Card>
+    }
+    else if (tasks.Count == 0)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">No tasks yet.</CardContent></Card>
+    }
+    else
+    {
+        <Card>
+            <CardContent>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="text-muted-foreground">
+                            <tr class="border-b">
+                                <th class="text-left py-2">Task</th>
+                                <th class="text-left py-2">Status</th>
+                                <th class="text-left py-2">Trigger</th>
+                                <th class="text-left py-2">Progress</th>
+                                <th class="text-left py-2">Started</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var task in tasks)
+                            {
+                                <tr class="border-b last:border-0">
+                                    <td class="py-2">@task.Name</td>
+                                    <td class="py-2">
+                                        @if (task.Status == BackupTaskStatus.Failed)
+                                        {
+                                            <Badge Variant="BadgeVariant.Destructive">Failed: @(string.IsNullOrWhiteSpace(task.Message) ? "No details" : task.Message)</Badge>
+                                        }
+                                        else
+                                        {
+                                            @GetStatusBadge(task.Status)
+                                        }
+                                    </td>
+                                    <td class="py-2">@GetTriggerBadge(task.Trigger)</td>
+                                    <td class="py-2">@task.Progress%</td>
+                                    <td class="py-2">@(task.StartedAt?.ToLocalTime().ToString("g") ?? "-")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </CardContent>
+        </Card>
+    }
+</div>
 
 @code {
     private List<BackupTaskDto> tasks = new();

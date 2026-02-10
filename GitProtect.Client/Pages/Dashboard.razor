@@ -3,72 +3,85 @@
 
 <PageTitle>Dashboard</PageTitle>
 
-<Card>
-    <CardHeader>
-        <div>
-            <CardTitle>Dashboard</CardTitle>
-            <CardDescription>Overall backup posture across GitHub, GitLab, and Forgejo.</CardDescription>
-        </div>
-        <Button @onclick="RunAllBackups" Disabled="@isLoading">Run All Backups</Button>
-    </CardHeader>
-</Card>
-
-@if (isLoading)
-{
-    <Card><CardContent>Loading dashboard...</CardContent></Card>
-}
-else if (!string.IsNullOrWhiteSpace(error))
-{
-    <Card><CardContent>@error</CardContent></Card>
-}
-else if (dashboard is null)
-{
-    <Card><CardContent>No data yet.</CardContent></Card>
-}
-else
-{
-    <div>
-        <Card>
-            <CardHeader><CardTitle>Total Repositories</CardTitle></CardHeader>
-            <CardContent><p>@dashboard.TotalRepositories</p></CardContent>
-        </Card>
-        <Card>
-            <CardHeader><CardTitle>Protected</CardTitle></CardHeader>
-            <CardContent><p>@dashboard.ProtectedCount</p></CardContent>
-        </Card>
-        <Card>
-            <CardHeader><CardTitle>Needs Attention</CardTitle></CardHeader>
-            <CardContent><p>@dashboard.FailedCount</p></CardContent>
-        </Card>
-    </div>
-
+<div class="space-y-6">
     <Card>
         <CardHeader>
-            <CardTitle>Backup Activity</CardTitle>
-            <CardDescription>Recent run totals grouped by time bucket.</CardDescription>
+            <div>
+                <CardTitle>Dashboard</CardTitle>
+                <CardDescription>Live posture for provider health, backup success, and activity.</CardDescription>
+            </div>
+            <div class="flex gap-2">
+                <Button Variant="ButtonVariant.Secondary" @onclick="LoadAsync" Disabled="@isLoading">Refresh</Button>
+                <Button @onclick="RunAllBackups" Disabled="@isLoading">Run All Backups</Button>
+            </div>
         </CardHeader>
-        <CardContent>
-            @if (dashboard.Activity.Count == 0)
-            {
-                <p>No recent backup activity.</p>
-            }
-            else
-            {
-                <table>
-                    <thead>
-                        <tr><th>Time</th><th>Count</th></tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var point in dashboard.Activity)
-                        {
-                            <tr><td>@point.Label</td><td>@point.Value</td></tr>
-                        }
-                    </tbody>
-                </table>
-            }
-        </CardContent>
     </Card>
-}
+
+    @if (isLoading)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">Loading dashboard...</CardContent></Card>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <Card><CardContent class="py-6"><Badge Variant="BadgeVariant.Destructive">@error</Badge></CardContent></Card>
+    }
+    else if (dashboard is null)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">No dashboard data available yet.</CardContent></Card>
+    }
+    else
+    {
+        <div class="grid gap-4 md:grid-cols-3">
+            <Card>
+                <CardHeader><CardTitle>Total Repositories</CardTitle></CardHeader>
+                <CardContent><p class="text-2xl font-semibold">@dashboard.TotalRepositories</p></CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle>Protected</CardTitle></CardHeader>
+                <CardContent><p class="text-2xl font-semibold">@dashboard.ProtectedCount</p></CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle>Needs Attention</CardTitle></CardHeader>
+                <CardContent><p class="text-2xl font-semibold">@dashboard.FailedCount</p></CardContent>
+            </Card>
+        </div>
+
+        <Card>
+            <CardHeader>
+                <CardTitle>Backup Activity</CardTitle>
+                <CardDescription>Recent run totals grouped by time bucket.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                @if (dashboard.Activity.Count == 0)
+                {
+                    <p class="text-sm text-muted-foreground">No recent backup activity.</p>
+                }
+                else
+                {
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="text-muted-foreground">
+                                <tr class="border-b">
+                                    <th class="text-left py-2">Time</th>
+                                    <th class="text-left py-2">Count</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var point in dashboard.Activity)
+                                {
+                                    <tr class="border-b last:border-0">
+                                        <td class="py-2">@point.Label</td>
+                                        <td class="py-2">@point.Value</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </CardContent>
+        </Card>
+    }
+</div>
 
 @code {
     [Inject] private ApiClient Api { get; set; } = default!;
@@ -84,6 +97,7 @@ else
         try
         {
             isLoading = true;
+            error = null;
             dashboard = await Api.GetDashboardAsync();
         }
         catch (Exception ex)

@@ -3,17 +3,38 @@
 
 <PageTitle>Backups</PageTitle>
 
-<Card>
-    <CardHeader>
-        <CardTitle>Choose Provider</CardTitle>
-        <CardDescription>Select a provider to configure backups and monitor status.</CardDescription>
-    </CardHeader>
-    <CardContent>
-        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/github")'>GitHub</Button>
-        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/gitlab")'>GitLab</Button>
-        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/forgejo")'>Forgejo</Button>
-    </CardContent>
-</Card>
+<div class="space-y-6">
+    <Card>
+        <CardHeader>
+            <CardTitle>Backups</CardTitle>
+            <CardDescription>Choose a provider and manage repository-level backup execution.</CardDescription>
+        </CardHeader>
+    </Card>
+
+    <div class="grid gap-4 md:grid-cols-3">
+        <Card>
+            <CardHeader>
+                <CardTitle>GitHub</CardTitle>
+                <CardDescription>Cloud-hosted repositories and organizations.</CardDescription>
+            </CardHeader>
+            <CardContent><Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/github")'>Open GitHub</Button></CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle>GitLab</CardTitle>
+                <CardDescription>Groups and projects on GitLab instances.</CardDescription>
+            </CardHeader>
+            <CardContent><Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/gitlab")'>Open GitLab</Button></CardContent>
+        </Card>
+        <Card>
+            <CardHeader>
+                <CardTitle>Forgejo</CardTitle>
+                <CardDescription>Self-hosted Forgejo repositories.</CardDescription>
+            </CardHeader>
+            <CardContent><Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/forgejo")'>Open Forgejo</Button></CardContent>
+        </Card>
+    </div>
+</div>
 
 @code {
     [Inject] private NavigationManager Nav { get; set; } = default!;

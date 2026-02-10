@@ -4,88 +4,104 @@
 
 <PageTitle>Settings</PageTitle>
 
-<Tabs DefaultValue="provider">
-    <TabsList>
-        <TabsTrigger Value="provider">Provider</TabsTrigger>
-        <TabsTrigger Value="storage">Storage</TabsTrigger>
-        <TabsTrigger Value="schedule">Schedule</TabsTrigger>
-        <TabsTrigger Value="retention">Retention</TabsTrigger>
-    </TabsList>
+<div class="space-y-6 max-w-4xl">
+    <Card>
+        <CardHeader>
+            <CardTitle>Settings</CardTitle>
+            <CardDescription>Manage provider, storage, schedule, and retention policy.</CardDescription>
+        </CardHeader>
+    </Card>
 
-    <TabsContent Value="provider">
-        <Card>
-            <CardHeader><CardTitle>Provider Settings</CardTitle></CardHeader>
-            <CardContent>
-                @if (!string.IsNullOrWhiteSpace(providerError))
-                {
-                    <Badge Variant="BadgeVariant.Destructive">@providerError</Badge>
-                }
-                <p>Provider</p>
-                <select @bind="selectedProvider" @bind:after="OnProviderSelectionChanged">
-                    <option value="@ProviderType.GitHub">GitHub</option>
-                    <option value="@ProviderType.GitLab">GitLab</option>
-                    <option value="@ProviderType.Forgejo">Forgejo</option>
-                </select>
-                <p>Instance URL</p>
-                <Input @bind-Value="providerBaseUrl" />
-                <p>Username</p>
-                <Input @bind-Value="providerUsername" />
-                <p>API Key</p>
-                <Input @bind-Value="providerApiKey" Type="InputType.Password" />
-                <div><Button @onclick="SaveProvider" Disabled="@isProviderBusy">Save Provider</Button></div>
-            </CardContent>
-        </Card>
-    </TabsContent>
+    <Tabs DefaultValue="provider" Class="w-full">
+        <TabsList>
+            <TabsTrigger Value="provider">Provider</TabsTrigger>
+            <TabsTrigger Value="storage">Storage</TabsTrigger>
+            <TabsTrigger Value="schedule">Schedule</TabsTrigger>
+            <TabsTrigger Value="retention">Retention</TabsTrigger>
+        </TabsList>
 
-    <TabsContent Value="storage">
-        <Card>
-            <CardHeader><CardTitle>S3 Storage</CardTitle></CardHeader>
-            <CardContent>
-                @if (!string.IsNullOrWhiteSpace(storageError))
-                {
-                    <Badge Variant="BadgeVariant.Destructive">@storageError</Badge>
-                }
-                <p>Endpoint</p><Input @bind-Value="storageEndpoint" />
-                <p>Region</p><Input @bind-Value="storageRegion" />
-                <p>Bucket</p><Input @bind-Value="storageBucket" />
-                <p>Access Key</p><Input @bind-Value="storageAccessKey" />
-                <p>Secret Key</p><Input @bind-Value="storageSecretKey" Type="InputType.Password" />
-                <p>Path Style</p><Checkbox @bind-Checked="storageUsePathStyle" />
-                <div><Button @onclick="SaveStorage" Disabled="@isStorageBusy">Save Storage</Button></div>
-            </CardContent>
-        </Card>
-    </TabsContent>
+        <TabsContent Value="provider">
+            <Card>
+                <CardHeader><CardTitle>Provider Settings</CardTitle></CardHeader>
+                <CardContent>
+                    <div class="space-y-4">
+                        @if (!string.IsNullOrWhiteSpace(providerError))
+                        {
+                            <Badge Variant="BadgeVariant.Destructive">@providerError</Badge>
+                        }
+                        <div>
+                            <label class="text-sm font-medium">Provider</label>
+                            <select class="mt-1 w-full rounded-md border bg-background px-3 py-2" @bind="selectedProvider" @bind:after="OnProviderSelectionChanged">
+                                <option value="@ProviderType.GitHub">GitHub</option>
+                                <option value="@ProviderType.GitLab">GitLab</option>
+                                <option value="@ProviderType.Forgejo">Forgejo</option>
+                            </select>
+                        </div>
+                        <div><label class="text-sm font-medium">Instance URL</label><Input @bind-Value="providerBaseUrl" class="mt-1" /></div>
+                        <div><label class="text-sm font-medium">Username</label><Input @bind-Value="providerUsername" class="mt-1" /></div>
+                        <div><label class="text-sm font-medium">API Key</label><Input @bind-Value="providerApiKey" Type="InputType.Password" class="mt-1" /></div>
+                        <Button @onclick="SaveProvider" Disabled="@isProviderBusy">Save Provider</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
 
-    <TabsContent Value="schedule">
-        <Card>
-            <CardHeader><CardTitle>Backup Schedule</CardTitle></CardHeader>
-            <CardContent>
-                @if (!string.IsNullOrWhiteSpace(scheduleError))
-                {
-                    <Badge Variant="BadgeVariant.Destructive">@scheduleError</Badge>
-                }
-                <p>Enabled</p><Switch @bind-Checked="scheduleEnabled" />
-                <p>Cron Expression</p><Input @bind-Value="scheduleCron" />
-                <div><Button @onclick="SaveSchedule" Disabled="@isScheduleBusy">Save Schedule</Button></div>
-            </CardContent>
-        </Card>
-    </TabsContent>
+        <TabsContent Value="storage">
+            <Card>
+                <CardHeader><CardTitle>S3 Storage</CardTitle></CardHeader>
+                <CardContent>
+                    <div class="space-y-4">
+                        @if (!string.IsNullOrWhiteSpace(storageError))
+                        {
+                            <Badge Variant="BadgeVariant.Destructive">@storageError</Badge>
+                        }
+                        <div><label class="text-sm font-medium">Endpoint</label><Input @bind-Value="storageEndpoint" class="mt-1" /></div>
+                        <div><label class="text-sm font-medium">Region</label><Input @bind-Value="storageRegion" class="mt-1" /></div>
+                        <div><label class="text-sm font-medium">Bucket</label><Input @bind-Value="storageBucket" class="mt-1" /></div>
+                        <div><label class="text-sm font-medium">Access Key</label><Input @bind-Value="storageAccessKey" class="mt-1" /></div>
+                        <div><label class="text-sm font-medium">Secret Key</label><Input @bind-Value="storageSecretKey" Type="InputType.Password" class="mt-1" /></div>
+                        <div class="flex items-center gap-2"><Checkbox @bind-Checked="storageUsePathStyle" /><label class="text-sm font-medium">Use path style</label></div>
+                        <Button @onclick="SaveStorage" Disabled="@isStorageBusy">Save Storage</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
 
-    <TabsContent Value="retention">
-        <Card>
-            <CardHeader><CardTitle>Retention Policy</CardTitle></CardHeader>
-            <CardContent>
-                @if (!string.IsNullOrWhiteSpace(retentionError))
-                {
-                    <Badge Variant="BadgeVariant.Destructive">@retentionError</Badge>
-                }
-                <p>Enabled</p><Switch @bind-Checked="retentionEnabled" />
-                <p>Retention Days</p><Input @bind-Value="retentionDaysText" Type="InputType.Number" Disabled="@(!retentionEnabled)" />
-                <div><Button @onclick="SaveRetention" Disabled="@isRetentionBusy">Save Retention</Button></div>
-            </CardContent>
-        </Card>
-    </TabsContent>
-</Tabs>
+        <TabsContent Value="schedule">
+            <Card>
+                <CardHeader><CardTitle>Backup Schedule</CardTitle></CardHeader>
+                <CardContent>
+                    <div class="space-y-4">
+                        @if (!string.IsNullOrWhiteSpace(scheduleError))
+                        {
+                            <Badge Variant="BadgeVariant.Destructive">@scheduleError</Badge>
+                        }
+                        <div class="flex items-center gap-2"><Switch @bind-Checked="scheduleEnabled" /><label class="text-sm font-medium">Enable scheduled backups</label></div>
+                        <div><label class="text-sm font-medium">Cron Expression</label><Input @bind-Value="scheduleCron" class="mt-1" /></div>
+                        <Button @onclick="SaveSchedule" Disabled="@isScheduleBusy">Save Schedule</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
+
+        <TabsContent Value="retention">
+            <Card>
+                <CardHeader><CardTitle>Retention Policy</CardTitle></CardHeader>
+                <CardContent>
+                    <div class="space-y-4">
+                        @if (!string.IsNullOrWhiteSpace(retentionError))
+                        {
+                            <Badge Variant="BadgeVariant.Destructive">@retentionError</Badge>
+                        }
+                        <div class="flex items-center gap-2"><Switch @bind-Checked="retentionEnabled" /><label class="text-sm font-medium">Enable retention</label></div>
+                        <div><label class="text-sm font-medium">Retention Days</label><Input @bind-Value="retentionDaysText" Type="InputType.Number" Disabled="@(!retentionEnabled)" class="mt-1" /></div>
+                        <Button @onclick="SaveRetention" Disabled="@isRetentionBusy">Save Retention</Button>
+                    </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
+    </Tabs>
+</div>
 
 @code {
     private List<ProviderStatusDto> providers = new();

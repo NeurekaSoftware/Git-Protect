@@ -4,56 +4,66 @@
 
 <PageTitle>Storage</PageTitle>
 
-<Card>
-    <CardHeader>
-        <div>
-            <CardTitle>Storage</CardTitle>
-            <CardDescription>S3 capacity, usage, and last verification.</CardDescription>
+<div class="space-y-6">
+    <Card>
+        <CardHeader>
+            <div>
+                <CardTitle>Storage Overview</CardTitle>
+                <CardDescription>S3 capacity, usage, and retention management.</CardDescription>
+            </div>
+            <div class="flex gap-2">
+                @if (retentionPolicy?.IsEnabled == true)
+                {
+                    <Button @onclick="PruneAsync" Disabled="@isPruneBusy">Prune</Button>
+                }
+                <Button Variant="ButtonVariant.Secondary" @onclick="LoadAsync" Disabled="@isLoading">Refresh</Button>
+            </div>
+        </CardHeader>
+    </Card>
+
+    @if (!string.IsNullOrWhiteSpace(pruneError))
+    {
+        <Badge Variant="BadgeVariant.Destructive">@pruneError</Badge>
+    }
+    else if (!string.IsNullOrWhiteSpace(pruneMessage))
+    {
+        <Badge>@pruneMessage</Badge>
+    }
+
+    @if (isLoading)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">Loading storage...</CardContent></Card>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <Card><CardContent class="py-6"><Badge Variant="BadgeVariant.Destructive">@error</Badge></CardContent></Card>
+    }
+    else if (storage?.Config is null)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">Storage is not configured. Go to Settings.</CardContent></Card>
+    }
+    else
+    {
+        var config = storage.Config;
+        <div class="grid gap-4 md:grid-cols-3">
+            <Card>
+                <CardHeader><CardTitle>Bucket</CardTitle></CardHeader>
+                <CardContent>
+                    <div class="text-base font-medium">@config.Bucket</div>
+                    <div class="text-sm text-muted-foreground">@config.Region</div>
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle>Used Space</CardTitle></CardHeader>
+                <CardContent><p class="text-2xl font-semibold">@FormatBytes(storage.TotalBytes)</p></CardContent>
+            </Card>
+            <Card>
+                <CardHeader><CardTitle>Last Verification</CardTitle></CardHeader>
+                <CardContent><p>@(config.VerifiedAt?.ToLocalTime().ToString("g") ?? "Never")</p></CardContent>
+            </Card>
         </div>
-    </CardHeader>
-    <CardContent>
-        <div>
-            @if (retentionPolicy?.IsEnabled == true)
-            {
-                <Button @onclick="PruneAsync" Disabled="@isPruneBusy">Prune</Button>
-            }
-            <Button Variant="ButtonVariant.Secondary" @onclick="LoadAsync" Disabled="@isLoading">Refresh</Button>
-        </div>
-    </CardContent>
-</Card>
-
-<Separator />
-
-@if (!string.IsNullOrWhiteSpace(pruneError))
-{
-    <Badge Variant="BadgeVariant.Destructive">@pruneError</Badge>
-}
-else if (!string.IsNullOrWhiteSpace(pruneMessage))
-{
-    <Badge>@pruneMessage</Badge>
-}
-
-@if (isLoading)
-{
-    <Card><CardContent>Loading storage...</CardContent></Card>
-}
-else if (!string.IsNullOrWhiteSpace(error))
-{
-    <Card><CardContent>@error</CardContent></Card>
-}
-else if (storage?.Config is null)
-{
-    <Card><CardContent>Storage is not configured. Go to <a href="/settings">Settings</a>.</CardContent></Card>
-}
-else
-{
-    var config = storage.Config;
-    <div>
-        <Card><CardHeader><CardTitle>Bucket</CardTitle></CardHeader><CardContent>@config.Bucket (@config.Region)</CardContent></Card>
-        <Card><CardHeader><CardTitle>Used</CardTitle></CardHeader><CardContent>@FormatBytes(storage.TotalBytes)</CardContent></Card>
-        <Card><CardHeader><CardTitle>Last Verify</CardTitle></CardHeader><CardContent>@(config.VerifiedAt?.ToLocalTime().ToString("g") ?? "Never")</CardContent></Card>
-    </div>
-}
+    }
+</div>
 
 @code {
     private StorageDetailsDto? storage;
