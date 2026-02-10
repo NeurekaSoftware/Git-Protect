@@ -1,11 +1,24 @@
 @inherits LayoutComponentBase
 
-<div class="app-shell">
-    <Sidebar />
+<div>
+    <Card>
+        <CardHeader>
+            <CardTitle>GitProtect</CardTitle>
+            <CardDescription>Backup operations console</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div>
+                <Button Variant="ButtonVariant.Ghost"><a href="/">Dashboard</a></Button>
+                <Button Variant="ButtonVariant.Ghost"><a href="/backups">Backups</a></Button>
+                <Button Variant="ButtonVariant.Ghost"><a href="/storage">Storage</a></Button>
+                <Button Variant="ButtonVariant.Ghost"><a href="/tasks">Tasks</a></Button>
+                <Button Variant="ButtonVariant.Ghost"><a href="/settings">Settings</a></Button>
+                <Button Variant="ButtonVariant.Ghost"><a href="/setup">Setup</a></Button>
+            </div>
+        </CardContent>
+    </Card>
 
-    <main class="main">
-        <div class="main-inner">
-            @Body
-        </div>
-    </main>
+    <Separator />
+
+    @Body
 </div>

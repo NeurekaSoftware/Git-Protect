@@ -3,19 +3,16 @@
 
 <PageTitle>Backups</PageTitle>
 
-<section class="hero">
-    <h1 class="page-title" style="text-align:center;">What do you want to protect?</h1>
-    <p class="page-subtitle" style="text-align:center;">Select a provider to configure backups and monitor status.</p>
-
-    <div class="service-grid" style="margin-top: 32px;">
-        <a href="/backups/github">
-            <ServiceCard Title="GitHub" IsSelected="true" IconClass="icon-github" Icon="fa-brands fa-github" />
-        </a>
-        <a href="/backups/gitlab">
-            <ServiceCard Title="GitLab" IconClass="icon-gitlab" Icon="fa-brands fa-gitlab" />
-        </a>
-        <a href="/backups/forgejo">
-            <ServiceCard Title="Forgejo" IconClass="icon-forgejo" Icon="fa-solid fa-code-branch" />
-        </a>
-    </div>
-</section>
+<Card>
+    <CardHeader>
+        <CardTitle>Choose Provider</CardTitle>
+        <CardDescription>Select a provider to configure backups and monitor status.</CardDescription>
+    </CardHeader>
+    <CardContent>
+        <div>
+            <Button><a href="/backups/github">GitHub</a></Button>
+            <Button><a href="/backups/gitlab">GitLab</a></Button>
+            <Button><a href="/backups/forgejo">Forgejo</a></Button>
+        </div>
+    </CardContent>
+</Card>

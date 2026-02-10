@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.2" />
+    <PackageReference Include="BlazorBlueprint.Components" Version="2.4.2" />
   </ItemGroup>
 
 </Project>

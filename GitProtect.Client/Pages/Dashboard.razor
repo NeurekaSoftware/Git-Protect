@@ -3,64 +3,69 @@
 
 <PageTitle>Dashboard</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Dashboard</h1>
-        <p class="page-subtitle">Overall backup posture across GitHub, GitLab, and Forgejo.</p>
-    </div>
-    <button class="button" @onclick="RunAllBackups" disabled="@isLoading">Run All Backups</button>
-</div>
+<Card>
+    <CardHeader>
+        <CardTitle>Dashboard</CardTitle>
+        <CardDescription>Overall backup posture across GitHub, GitLab, and Forgejo.</CardDescription>
+    </CardHeader>
+    <CardContent>
+        <Button @onclick="RunAllBackups" Disabled="@isLoading">Run All Backups</Button>
+    </CardContent>
+</Card>
+
+<Separator />
 
 @if (isLoading)
 {
-    <div class="card">Loading dashboard...</div>
+    <Card><CardContent>Loading dashboard...</CardContent></Card>
 }
 else if (!string.IsNullOrWhiteSpace(error))
 {
-    <div class="card">@error</div>
+    <Card><CardContent>@error</CardContent></Card>
 }
 else if (dashboard is null)
 {
-    <div class="card">No data yet.</div>
+    <Card><CardContent>No data yet.</CardContent></Card>
 }
 else
 {
-    <div class="card-grid">
-        <div class="card">
-            <p class="card-title">Total Repositories</p>
-            <div class="stat-value">@dashboard.TotalRepositories</div>
-            <div class="stat-sub">Across all providers</div>
-        </div>
-        <div class="card">
-            <p class="card-title">Protected</p>
-            <div class="stat-value">@dashboard.ProtectedCount</div>
-            <div class="stat-sub">Successful backups</div>
-        </div>
-        <div class="card">
-            <p class="card-title">Needs Attention</p>
-            <div class="stat-value">@dashboard.FailedCount</div>
-            <div class="stat-sub">Failed backups</div>
-        </div>
+    <div>
+        <Card>
+            <CardHeader><CardTitle>Total Repositories</CardTitle></CardHeader>
+            <CardContent><h2>@dashboard.TotalRepositories</h2></CardContent>
+        </Card>
+        <Card>
+            <CardHeader><CardTitle>Protected</CardTitle></CardHeader>
+            <CardContent><h2>@dashboard.ProtectedCount</h2></CardContent>
+        </Card>
+        <Card>
+            <CardHeader><CardTitle>Needs Attention</CardTitle></CardHeader>
+            <CardContent><h2>@dashboard.FailedCount</h2></CardContent>
+        </Card>
     </div>
 
-    <div class="card" style="margin-top: 24px;">
-        <p class="card-title">Backup Activity</p>
-        @if (dashboard.Activity.Count == 0)
-        {
-            <div class="empty-state">No recent backup activity.</div>
-        }
-        else
-        {
-            <div class="chart">
-                @foreach (var point in dashboard.Activity)
-                {
-                    <div class="chart-bar" style="height: @GetBarHeight(point.Value)%;">
-                        <span>@point.Label</span>
-                    </div>
-                }
-            </div>
-        }
-    </div>
+    <Separator />
+
+    <Card>
+        <CardHeader>
+            <CardTitle>Backup Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+            @if (dashboard.Activity.Count == 0)
+            {
+                <p>No recent backup activity.</p>
+            }
+            else
+            {
+                <ul>
+                    @foreach (var point in dashboard.Activity)
+                    {
+                        <li>@point.Label: @point.Value</li>
+                    }
+                </ul>
+            }
+        </CardContent>
+    </Card>
 }
 
 @code {
@@ -70,10 +75,7 @@ else
     private bool isLoading;
     private string? error;
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAsync();
-    }
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
@@ -90,22 +92,6 @@ else
         {
             isLoading = false;
         }
-    }
-
-    private double GetBarHeight(int value)
-    {
-        if (dashboard is null || dashboard.Activity.Count == 0)
-        {
-            return 10;
-        }
-
-        var max = dashboard.Activity.Max(p => p.Value);
-        if (max == 0)
-        {
-            return 10;
-        }
-
-        return Math.Clamp((value / (double)max) * 100, 10, 100);
     }
 
     private async Task RunAllBackups()
