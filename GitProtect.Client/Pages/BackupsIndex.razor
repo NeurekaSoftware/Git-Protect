@@ -9,10 +9,12 @@
         <CardDescription>Select a provider to configure backups and monitor status.</CardDescription>
     </CardHeader>
     <CardContent>
-        <div>
-            <Button><a href="/backups/github">GitHub</a></Button>
-            <Button><a href="/backups/gitlab">GitLab</a></Button>
-            <Button><a href="/backups/forgejo">Forgejo</a></Button>
-        </div>
+        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/github")'>GitHub</Button>
+        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/gitlab")'>GitLab</Button>
+        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/forgejo")'>Forgejo</Button>
     </CardContent>
 </Card>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+}

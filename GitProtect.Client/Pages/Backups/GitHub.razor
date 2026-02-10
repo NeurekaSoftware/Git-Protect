@@ -11,10 +11,8 @@
         <CardDescription>API + git mirror backups with LFS support.</CardDescription>
     </CardHeader>
     <CardContent>
-        <div>
             <Button Variant="ButtonVariant.Secondary" @onclick="SyncRepos" Disabled="@(isSyncing || isLoading)">Sync Repos</Button>
             <Button @onclick="RunBackup" Disabled="@(isProviderBackupRequested || IsProviderBackupRunning || isLoading)">Run Backup</Button>
-        </div>
     </CardContent>
 </Card>
 
@@ -30,7 +28,7 @@ else if (!string.IsNullOrWhiteSpace(error))
 }
 else if (provider is null || !provider.IsVerified)
 {
-    <Card><CardContent>Connect GitHub Backups in <a href="/setup">Setup</a> or <a href="/settings">Settings</a> to view repositories.</CardContent></Card>
+    <Card><CardContent>Connect GitHub Backups in Setup or Settings to view repositories.</CardContent></Card>
 }
 else if (repositories.Count == 0)
 {

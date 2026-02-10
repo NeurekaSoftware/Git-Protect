@@ -5,15 +5,13 @@
 
 <Card>
     <CardHeader>
-        <CardTitle>Dashboard</CardTitle>
-        <CardDescription>Overall backup posture across GitHub, GitLab, and Forgejo.</CardDescription>
-    </CardHeader>
-    <CardContent>
+        <div>
+            <CardTitle>Dashboard</CardTitle>
+            <CardDescription>Overall backup posture across GitHub, GitLab, and Forgejo.</CardDescription>
+        </div>
         <Button @onclick="RunAllBackups" Disabled="@isLoading">Run All Backups</Button>
-    </CardContent>
+    </CardHeader>
 </Card>
-
-<Separator />
 
 @if (isLoading)
 {
@@ -32,23 +30,22 @@ else
     <div>
         <Card>
             <CardHeader><CardTitle>Total Repositories</CardTitle></CardHeader>
-            <CardContent><h2>@dashboard.TotalRepositories</h2></CardContent>
+            <CardContent><p>@dashboard.TotalRepositories</p></CardContent>
         </Card>
         <Card>
             <CardHeader><CardTitle>Protected</CardTitle></CardHeader>
-            <CardContent><h2>@dashboard.ProtectedCount</h2></CardContent>
+            <CardContent><p>@dashboard.ProtectedCount</p></CardContent>
         </Card>
         <Card>
             <CardHeader><CardTitle>Needs Attention</CardTitle></CardHeader>
-            <CardContent><h2>@dashboard.FailedCount</h2></CardContent>
+            <CardContent><p>@dashboard.FailedCount</p></CardContent>
         </Card>
     </div>
-
-    <Separator />
 
     <Card>
         <CardHeader>
             <CardTitle>Backup Activity</CardTitle>
+            <CardDescription>Recent run totals grouped by time bucket.</CardDescription>
         </CardHeader>
         <CardContent>
             @if (dashboard.Activity.Count == 0)
@@ -57,12 +54,17 @@ else
             }
             else
             {
-                <ul>
-                    @foreach (var point in dashboard.Activity)
-                    {
-                        <li>@point.Label: @point.Value</li>
-                    }
-                </ul>
+                <table>
+                    <thead>
+                        <tr><th>Time</th><th>Count</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var point in dashboard.Activity)
+                        {
+                            <tr><td>@point.Label</td><td>@point.Value</td></tr>
+                        }
+                    </tbody>
+                </table>
             }
         </CardContent>
     </Card>

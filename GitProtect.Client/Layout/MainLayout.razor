@@ -1,24 +1,26 @@
 @inherits LayoutComponentBase
 
-<div>
-    <Card>
-        <CardHeader>
-            <CardTitle>GitProtect</CardTitle>
-            <CardDescription>Backup operations console</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div>
-                <Button Variant="ButtonVariant.Ghost"><a href="/">Dashboard</a></Button>
-                <Button Variant="ButtonVariant.Ghost"><a href="/backups">Backups</a></Button>
-                <Button Variant="ButtonVariant.Ghost"><a href="/storage">Storage</a></Button>
-                <Button Variant="ButtonVariant.Ghost"><a href="/tasks">Tasks</a></Button>
-                <Button Variant="ButtonVariant.Ghost"><a href="/settings">Settings</a></Button>
-                <Button Variant="ButtonVariant.Ghost"><a href="/setup">Setup</a></Button>
-            </div>
-        </CardContent>
-    </Card>
+<Card>
+    <CardHeader>
+        <CardTitle>GitProtect</CardTitle>
+        <CardDescription>Backup Operations Console</CardDescription>
+    </CardHeader>
+    <CardContent>
+        <div>
+            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/")'>Dashboard</Button>
+            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/backups")'>Backups</Button>
+            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/storage")'>Storage</Button>
+            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/tasks")'>Tasks</Button>
+            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/settings")'>Settings</Button>
+            <Button Variant="ButtonVariant.Ghost" @onclick='() => Nav.NavigateTo("/setup")'>Setup</Button>
+        </div>
+    </CardContent>
+</Card>
 
-    <Separator />
+<Separator />
 
-    @Body
-</div>
+@Body
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+}
