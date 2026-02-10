@@ -5,58 +5,98 @@
 
 <PageTitle>Setup</PageTitle>
 
-<Card>
-    <CardHeader>
-        <div>
-            <CardTitle>Setup GitProtect</CardTitle>
-            <CardDescription>Connect a provider, then verify S3 storage.</CardDescription>
-        </div>
-    </CardHeader>
-</Card>
-
-<Separator />
-
-@if (!string.IsNullOrWhiteSpace(error))
-{
-    <Badge Variant="BadgeVariant.Destructive">@error</Badge>
-}
-
-@if (step == 1)
-{
+<div class="space-y-6 max-w-3xl">
     <Card>
-        <CardHeader><CardTitle>Provider</CardTitle></CardHeader>
-        <CardContent>
-            <p>Provider</p>
-            <select @bind="selectedProvider" @bind:after="OnProviderChanged">
-                <option value="@ProviderType.GitHub">GitHub</option>
-                <option value="@ProviderType.GitLab">GitLab</option>
-                <option value="@ProviderType.Forgejo">Forgejo</option>
-            </select>
-            <p>Instance URL</p><Input @bind-Value="baseUrl" />
-            <p>Username</p><Input @bind-Value="username" />
-            <p>API Key</p><Input @bind-Value="apiKey" Type="InputType.Password" />
-            <div><Button @onclick="ContinueToStorage" Disabled="@isBusy">Continue to Storage</Button></div>
-        </CardContent>
-    </Card>
-}
-else
-{
-    <Card>
-        <CardHeader><CardTitle>Storage</CardTitle></CardHeader>
-        <CardContent>
-            <p>Endpoint</p><Input @bind-Value="s3Endpoint" />
-            <p>Region</p><Input @bind-Value="s3Region" />
-            <p>Bucket</p><Input @bind-Value="s3Bucket" />
-            <p>Access Key</p><Input @bind-Value="s3AccessKey" />
-            <p>Secret Key</p><Input @bind-Value="s3SecretKey" Type="InputType.Password" />
-            <p>Path Style</p><Checkbox @bind-Checked="s3UsePathStyle" />
+        <CardHeader>
             <div>
-                <Button Variant="ButtonVariant.Secondary" @onclick="() => step = 1" Disabled="@isBusy">Back</Button>
-                <Button @onclick="SaveStorage" Disabled="@isBusy">Verify & Save</Button>
+                <CardTitle>Setup Wizard</CardTitle>
+                <CardDescription>Connect a Git provider first, then verify your S3 destination.</CardDescription>
             </div>
-        </CardContent>
+            <Badge Variant="@(step == 1 ? BadgeVariant.Secondary : BadgeVariant.Outline)">Step @step of 2</Badge>
+        </CardHeader>
     </Card>
-}
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <Badge Variant="BadgeVariant.Destructive">@error</Badge>
+    }
+
+    @if (step == 1)
+    {
+        <Card>
+            <CardHeader>
+                <CardTitle>Provider Connection</CardTitle>
+                <CardDescription>Use an API key or token with repository read access.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-sm font-medium">Provider</label>
+                        <select class="mt-1 w-full rounded-md border bg-background px-3 py-2" @bind="selectedProvider" @bind:after="OnProviderChanged">
+                            <option value="@ProviderType.GitHub">GitHub</option>
+                            <option value="@ProviderType.GitLab">GitLab</option>
+                            <option value="@ProviderType.Forgejo">Forgejo</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">Instance URL</label>
+                        <Input @bind-Value="baseUrl" class="mt-1" />
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">Username</label>
+                        <Input @bind-Value="username" class="mt-1" />
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">API Key</label>
+                        <Input @bind-Value="apiKey" Type="InputType.Password" class="mt-1" />
+                    </div>
+                    <Button @onclick="ContinueToStorage" Disabled="@isBusy">Continue to Storage</Button>
+                </div>
+            </CardContent>
+        </Card>
+    }
+    else
+    {
+        <Card>
+            <CardHeader>
+                <CardTitle>Storage Connection</CardTitle>
+                <CardDescription>Configure your S3-compatible storage endpoint.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-sm font-medium">Endpoint</label>
+                        <Input @bind-Value="s3Endpoint" class="mt-1" />
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">Region</label>
+                        <Input @bind-Value="s3Region" class="mt-1" />
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">Bucket</label>
+                        <Input @bind-Value="s3Bucket" class="mt-1" />
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">Access Key</label>
+                        <Input @bind-Value="s3AccessKey" class="mt-1" />
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium">Secret Key</label>
+                        <Input @bind-Value="s3SecretKey" Type="InputType.Password" class="mt-1" />
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <Checkbox @bind-Checked="s3UsePathStyle" />
+                        <label class="text-sm font-medium">Use path style</label>
+                    </div>
+                    <div class="flex gap-2">
+                        <Button Variant="ButtonVariant.Secondary" @onclick="() => step = 1" Disabled="@isBusy">Back</Button>
+                        <Button @onclick="SaveStorage" Disabled="@isBusy">Verify &amp; Finish</Button>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    }
+</div>
 
 @code {
     private int step = 1;

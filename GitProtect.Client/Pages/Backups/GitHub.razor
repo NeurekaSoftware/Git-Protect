@@ -5,68 +5,78 @@
 
 <PageTitle>GitHub Backups</PageTitle>
 
-<Card>
-    <CardHeader>
-        <CardTitle>GitHub Backups</CardTitle>
-        <CardDescription>API + git mirror backups with LFS support.</CardDescription>
-    </CardHeader>
-    <CardContent>
-            <Button Variant="ButtonVariant.Secondary" @onclick="SyncRepos" Disabled="@(isSyncing || isLoading)">Sync Repos</Button>
-            <Button @onclick="RunBackup" Disabled="@(isProviderBackupRequested || IsProviderBackupRunning || isLoading)">Run Backup</Button>
-    </CardContent>
-</Card>
-
-<Separator />
-
-@if (isLoading)
-{
-    <Card><CardContent>Loading repositories...</CardContent></Card>
-}
-else if (!string.IsNullOrWhiteSpace(error))
-{
-    <Card><CardContent>@error</CardContent></Card>
-}
-else if (provider is null || !provider.IsVerified)
-{
-    <Card><CardContent>Connect GitHub Backups in Setup or Settings to view repositories.</CardContent></Card>
-}
-else if (repositories.Count == 0)
-{
-    <Card><CardContent>No repositories found. Sync to pull your list.</CardContent></Card>
-}
-else
-{
+<div class="space-y-6">
     <Card>
-        <CardContent>
-            <table>
-                <thead>
-                    <tr><th>Repository</th><th>Status</th><th>Last Backup</th><th>Size</th><th></th></tr>
-                </thead>
-                <tbody>
-                @foreach (var repo in repositories)
-                {
-                    <tr>
-                        <td>@repo.FullName</td>
-                        <td>
-                            @if (repo.Status == BackupStatus.Failed)
-                            {
-                                <Badge Variant="BadgeVariant.Destructive">Failed: @(string.IsNullOrWhiteSpace(repo.LastBackupMessage) ? "No details" : repo.LastBackupMessage)</Badge>
-                            }
-                            else
-                            {
-                                @GetStatusBadge(repo.Status)
-                            }
-                        </td>
-                        <td>@(repo.LastBackupAt?.ToLocalTime().ToString("g") ?? "Never")</td>
-                        <td>@FormatBytes(repo.LastBackupSizeBytes)</td>
-                        <td><Button Variant="ButtonVariant.Outline" @onclick="() => RunRepoBackup(repo.Id)" Disabled="@(IsRepoBackupDisabled(repo.Id))">Backup</Button></td>
-                    </tr>
-                }
-                </tbody>
-            </table>
-        </CardContent>
+        <CardHeader>
+            <div>
+                <CardTitle>GitHub Backups</CardTitle>
+                <CardDescription>API + git mirror backups with LFS support.</CardDescription>
+            </div>
+            <div class="flex gap-2">
+                <Button Variant="ButtonVariant.Secondary" @onclick="SyncRepos" Disabled="@(isSyncing || isLoading)">Sync Repos</Button>
+                <Button @onclick="RunBackup" Disabled="@(isProviderBackupRequested || IsProviderBackupRunning || isLoading)">Run Backup</Button>
+            </div>
+        </CardHeader>
     </Card>
-}
+
+    @if (isLoading)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">Loading repositories...</CardContent></Card>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <Card><CardContent class="py-6"><Badge Variant="BadgeVariant.Destructive">@error</Badge></CardContent></Card>
+    }
+    else if (provider is null || !provider.IsVerified)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">Connect GitHub in Setup or Settings to view repositories.</CardContent></Card>
+    }
+    else if (repositories.Count == 0)
+    {
+        <Card><CardContent class="py-6 text-sm text-muted-foreground">No repositories found. Sync to pull your list.</CardContent></Card>
+    }
+    else
+    {
+        <Card>
+            <CardContent>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="text-muted-foreground">
+                            <tr class="border-b">
+                                <th class="text-left py-2">Repository</th>
+                                <th class="text-left py-2">Status</th>
+                                <th class="text-left py-2">Last Backup</th>
+                                <th class="text-left py-2">Size</th>
+                                <th class="text-left py-2">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var repo in repositories)
+                            {
+                                <tr class="border-b last:border-0">
+                                    <td class="py-2">@repo.FullName</td>
+                                    <td class="py-2">
+                                        @if (repo.Status == BackupStatus.Failed)
+                                        {
+                                            <Badge Variant="BadgeVariant.Destructive">Failed: @(string.IsNullOrWhiteSpace(repo.LastBackupMessage) ? "No details" : repo.LastBackupMessage)</Badge>
+                                        }
+                                        else
+                                        {
+                                            @GetStatusBadge(repo.Status)
+                                        }
+                                    </td>
+                                    <td class="py-2">@(repo.LastBackupAt?.ToLocalTime().ToString("g") ?? "Never")</td>
+                                    <td class="py-2">@FormatBytes(repo.LastBackupSizeBytes)</td>
+                                    <td class="py-2"><Button Variant="ButtonVariant.Outline" @onclick="() => RunRepoBackup(repo.Id)" Disabled="@(IsRepoBackupDisabled(repo.Id))">Backup</Button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </CardContent>
+        </Card>
+    }
+</div>
 
 @code {
     private ProviderStatusDto? provider;
