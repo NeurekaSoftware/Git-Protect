@@ -4,133 +4,88 @@
 
 <PageTitle>Settings</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Settings</h1>
-        <p class="page-subtitle">Manage provider credentials and S3 storage settings.</p>
-    </div>
-</div>
+<Tabs DefaultValue="provider">
+    <TabsList>
+        <TabsTrigger Value="provider">Provider</TabsTrigger>
+        <TabsTrigger Value="storage">Storage</TabsTrigger>
+        <TabsTrigger Value="schedule">Schedule</TabsTrigger>
+        <TabsTrigger Value="retention">Retention</TabsTrigger>
+    </TabsList>
 
-<div class="card" style="margin-bottom: 24px;">
-    <p class="card-title">Provider Settings</p>
-    @if (!string.IsNullOrWhiteSpace(providerError))
-    {
-        <div class="empty-state">@providerError</div>
-    }
-    <div class="form-grid">
-        <div class="form-group">
-            <label class="label">Provider</label>
-            <select class="select" @bind="selectedProvider" @bind:after="OnProviderSelectionChanged">
-                <option value="@ProviderType.GitHub">GitHub</option>
-                <option value="@ProviderType.GitLab">GitLab</option>
-                <option value="@ProviderType.Forgejo">Forgejo</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label class="label">Instance URL</label>
-            <input class="input" @bind="providerBaseUrl" />
-        </div>
-        <div class="form-group">
-            <label class="label">Username</label>
-            <input class="input" @bind="providerUsername" />
-        </div>
-        <div class="form-group">
-            <label class="label">API Key</label>
-            <input class="input" @bind="providerApiKey" />
-        </div>
-    </div>
-    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
-        <button class="button" @onclick="SaveProvider" disabled="@isProviderBusy">Save Provider</button>
-    </div>
-</div>
+    <TabsContent Value="provider">
+        <Card>
+            <CardHeader><CardTitle>Provider Settings</CardTitle></CardHeader>
+            <CardContent>
+                @if (!string.IsNullOrWhiteSpace(providerError))
+                {
+                    <Badge Variant="BadgeVariant.Destructive">@providerError</Badge>
+                }
+                <p>Provider</p>
+                <select @bind="selectedProvider" @bind:after="OnProviderSelectionChanged">
+                    <option value="@ProviderType.GitHub">GitHub</option>
+                    <option value="@ProviderType.GitLab">GitLab</option>
+                    <option value="@ProviderType.Forgejo">Forgejo</option>
+                </select>
+                <p>Instance URL</p>
+                <Input @bind-Value="providerBaseUrl" />
+                <p>Username</p>
+                <Input @bind-Value="providerUsername" />
+                <p>API Key</p>
+                <Input @bind-Value="providerApiKey" Type="InputType.Password" />
+                <div><Button @onclick="SaveProvider" Disabled="@isProviderBusy">Save Provider</Button></div>
+            </CardContent>
+        </Card>
+    </TabsContent>
 
-<div class="card">
-    <p class="card-title">S3 Storage</p>
-    @if (!string.IsNullOrWhiteSpace(storageError))
-    {
-        <div class="empty-state">@storageError</div>
-    }
-    <div class="form-grid">
-        <div class="form-group">
-            <label class="label">Endpoint</label>
-            <input class="input" @bind="storageEndpoint" />
-        </div>
-        <div class="form-group">
-            <label class="label">Region</label>
-            <input class="input" @bind="storageRegion" />
-        </div>
-        <div class="form-group">
-            <label class="label">Bucket</label>
-            <input class="input" @bind="storageBucket" />
-        </div>
-        <div class="form-group">
-            <label class="label">Access Key</label>
-            <input class="input" @bind="storageAccessKey" />
-        </div>
-        <div class="form-group">
-            <label class="label">Secret Key</label>
-            <input class="input" @bind="storageSecretKey" />
-        </div>
-        <div class="form-group">
-            <label class="label">Path Style</label>
-            <label class="checkbox-row">
-                <input type="checkbox" class="checkbox" @bind="storageUsePathStyle" />
-                Use path-style requests (endpoint/bucket)
-            </label>
-        </div>
-    </div>
-    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
-        <button class="button" @onclick="SaveStorage" disabled="@isStorageBusy">Save Storage</button>
-    </div>
-</div>
+    <TabsContent Value="storage">
+        <Card>
+            <CardHeader><CardTitle>S3 Storage</CardTitle></CardHeader>
+            <CardContent>
+                @if (!string.IsNullOrWhiteSpace(storageError))
+                {
+                    <Badge Variant="BadgeVariant.Destructive">@storageError</Badge>
+                }
+                <p>Endpoint</p><Input @bind-Value="storageEndpoint" />
+                <p>Region</p><Input @bind-Value="storageRegion" />
+                <p>Bucket</p><Input @bind-Value="storageBucket" />
+                <p>Access Key</p><Input @bind-Value="storageAccessKey" />
+                <p>Secret Key</p><Input @bind-Value="storageSecretKey" Type="InputType.Password" />
+                <p>Path Style</p><Checkbox @bind-Checked="storageUsePathStyle" />
+                <div><Button @onclick="SaveStorage" Disabled="@isStorageBusy">Save Storage</Button></div>
+            </CardContent>
+        </Card>
+    </TabsContent>
 
-<div class="card" style="margin-top: 24px;">
-    <p class="card-title">Backup Schedule</p>
-    @if (!string.IsNullOrWhiteSpace(scheduleError))
-    {
-        <div class="empty-state">@scheduleError</div>
-    }
-    <div class="form-grid">
-        <div class="form-group">
-            <label class="label">Enabled</label>
-            <label class="checkbox-row">
-                <input type="checkbox" class="checkbox" @bind="scheduleEnabled" />
-                Enable scheduled backups
-            </label>
-        </div>
-        <div class="form-group">
-            <label class="label">Cron Expression</label>
-            <input class="input" @bind="scheduleCron" placeholder="0 0 * * *" />
-        </div>
-    </div>
-    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
-        <button class="button" @onclick="SaveSchedule" disabled="@isScheduleBusy">Save Schedule</button>
-    </div>
-</div>
+    <TabsContent Value="schedule">
+        <Card>
+            <CardHeader><CardTitle>Backup Schedule</CardTitle></CardHeader>
+            <CardContent>
+                @if (!string.IsNullOrWhiteSpace(scheduleError))
+                {
+                    <Badge Variant="BadgeVariant.Destructive">@scheduleError</Badge>
+                }
+                <p>Enabled</p><Switch @bind-Checked="scheduleEnabled" />
+                <p>Cron Expression</p><Input @bind-Value="scheduleCron" />
+                <div><Button @onclick="SaveSchedule" Disabled="@isScheduleBusy">Save Schedule</Button></div>
+            </CardContent>
+        </Card>
+    </TabsContent>
 
-<div class="card" style="margin-top: 24px;">
-    <p class="card-title">Retention Policy</p>
-    @if (!string.IsNullOrWhiteSpace(retentionError))
-    {
-        <div class="empty-state">@retentionError</div>
-    }
-    <div class="form-grid">
-        <div class="form-group">
-            <label class="label">Enabled</label>
-            <label class="checkbox-row">
-                <input type="checkbox" class="checkbox" @bind="retentionEnabled" />
-                Delete backups older than
-            </label>
-        </div>
-        <div class="form-group">
-            <label class="label">Retention Days</label>
-            <input class="input" type="number" min="1" max="3650" step="1" @bind="retentionDays" disabled="@(!retentionEnabled)" />
-        </div>
-    </div>
-    <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
-        <button class="button" @onclick="SaveRetention" disabled="@isRetentionBusy">Save Retention</button>
-    </div>
-</div>
+    <TabsContent Value="retention">
+        <Card>
+            <CardHeader><CardTitle>Retention Policy</CardTitle></CardHeader>
+            <CardContent>
+                @if (!string.IsNullOrWhiteSpace(retentionError))
+                {
+                    <Badge Variant="BadgeVariant.Destructive">@retentionError</Badge>
+                }
+                <p>Enabled</p><Switch @bind-Checked="retentionEnabled" />
+                <p>Retention Days</p><Input @bind-Value="retentionDays" Type="InputType.Number" Disabled="@(!retentionEnabled)" />
+                <div><Button @onclick="SaveRetention" Disabled="@isRetentionBusy">Save Retention</Button></div>
+            </CardContent>
+        </Card>
+    </TabsContent>
+</Tabs>
 
 @code {
     private List<ProviderStatusDto> providers = new();

@@ -5,92 +5,55 @@
 
 <PageTitle>Setup</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Setup GitProtect</h1>
-        <p class="page-subtitle">Connect a provider, then verify S3 storage.</p>
-    </div>
-</div>
+<Card>
+    <CardHeader>
+        <CardTitle>Setup GitProtect</CardTitle>
+        <CardDescription>Connect a provider, then verify S3 storage.</CardDescription>
+    </CardHeader>
+</Card>
 
-<div class="stepper">
-    <div class="step @(step == 1 ? "is-active" : string.Empty)">1. Provider</div>
-    <div class="step @(step == 2 ? "is-active" : string.Empty)">2. Storage</div>
-</div>
+<Separator />
 
 @if (!string.IsNullOrWhiteSpace(error))
 {
-    <div class="card" style="margin-bottom: 16px;">@error</div>
+    <Badge Variant="BadgeVariant.Destructive">@error</Badge>
 }
 
 @if (step == 1)
 {
-    <div class="card">
-        <div class="form-grid">
-            <div class="form-group">
-                <label class="label">Provider</label>
-                <select class="select" @bind="selectedProvider" @bind:after="OnProviderChanged">
-                    <option value="@ProviderType.GitHub">GitHub</option>
-                    <option value="@ProviderType.GitLab">GitLab</option>
-                    <option value="@ProviderType.Forgejo">Forgejo</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="label">Instance URL</label>
-                <input class="input" @bind="baseUrl" />
-            </div>
-            <div class="form-group">
-                <label class="label">Username</label>
-                <input class="input" @bind="username" placeholder="octocat" />
-            </div>
-            <div class="form-group">
-                <label class="label">API Key</label>
-                <input class="input" @bind="apiKey" placeholder="token" />
-            </div>
-        </div>
-
-        <div style="display:flex; justify-content:flex-end; margin-top: 18px;">
-            <button class="button" @onclick="ContinueToStorage" disabled="@isBusy">Continue to Storage</button>
-        </div>
-    </div>
+    <Card>
+        <CardHeader><CardTitle>Provider</CardTitle></CardHeader>
+        <CardContent>
+            <p>Provider</p>
+            <select @bind="selectedProvider" @bind:after="OnProviderChanged">
+                <option value="@ProviderType.GitHub">GitHub</option>
+                <option value="@ProviderType.GitLab">GitLab</option>
+                <option value="@ProviderType.Forgejo">Forgejo</option>
+            </select>
+            <p>Instance URL</p><Input @bind-Value="baseUrl" />
+            <p>Username</p><Input @bind-Value="username" />
+            <p>API Key</p><Input @bind-Value="apiKey" Type="InputType.Password" />
+            <div><Button @onclick="ContinueToStorage" Disabled="@isBusy">Continue to Storage</Button></div>
+        </CardContent>
+    </Card>
 }
 else
 {
-    <div class="card">
-        <div class="form-grid">
-            <div class="form-group">
-                <label class="label">Endpoint</label>
-                <input class="input" @bind="s3Endpoint" placeholder="https://s3.amazonaws.com" />
+    <Card>
+        <CardHeader><CardTitle>Storage</CardTitle></CardHeader>
+        <CardContent>
+            <p>Endpoint</p><Input @bind-Value="s3Endpoint" />
+            <p>Region</p><Input @bind-Value="s3Region" />
+            <p>Bucket</p><Input @bind-Value="s3Bucket" />
+            <p>Access Key</p><Input @bind-Value="s3AccessKey" />
+            <p>Secret Key</p><Input @bind-Value="s3SecretKey" Type="InputType.Password" />
+            <p>Path Style</p><Checkbox @bind-Checked="s3UsePathStyle" />
+            <div>
+                <Button Variant="ButtonVariant.Secondary" @onclick="() => step = 1" Disabled="@isBusy">Back</Button>
+                <Button @onclick="SaveStorage" Disabled="@isBusy">Verify & Save</Button>
             </div>
-            <div class="form-group">
-                <label class="label">Region</label>
-                <input class="input" @bind="s3Region" placeholder="us-east-1" />
-            </div>
-            <div class="form-group">
-                <label class="label">Bucket</label>
-                <input class="input" @bind="s3Bucket" placeholder="gitprotect-backups" />
-            </div>
-            <div class="form-group">
-                <label class="label">Access Key</label>
-                <input class="input" @bind="s3AccessKey" />
-            </div>
-            <div class="form-group">
-                <label class="label">Secret Key</label>
-                <input class="input" @bind="s3SecretKey" />
-            </div>
-            <div class="form-group">
-                <label class="label">Path Style</label>
-                <label class="checkbox-row">
-                    <input type="checkbox" class="checkbox" @bind="s3UsePathStyle" />
-                    Use path-style requests (endpoint/bucket)
-                </label>
-            </div>
-        </div>
-
-        <div style="display:flex; gap:12px; justify-content:flex-end; margin-top: 18px;">
-            <button class="button secondary" @onclick="() => step = 1" disabled="@isBusy">Back</button>
-            <button class="button" @onclick="SaveStorage" disabled="@isBusy">Verify & Save</button>
-        </div>
-    </div>
+        </CardContent>
+    </Card>
 }
 
 @code {

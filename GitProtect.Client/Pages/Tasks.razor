@@ -5,76 +5,63 @@
 
 <PageTitle>Tasks</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Tasks</h1>
-        <p class="page-subtitle">Current and recent backup runs.</p>
-    </div>
-</div>
+<Card>
+    <CardHeader>
+        <CardTitle>Tasks</CardTitle>
+        <CardDescription>Current and recent backup runs.</CardDescription>
+    </CardHeader>
+</Card>
+
+<Separator />
 
 @if (isLoading)
 {
-    <div class="card">Loading tasks...</div>
+    <Card><CardContent>Loading tasks...</CardContent></Card>
 }
 else if (!string.IsNullOrWhiteSpace(error))
 {
-    <div class="card">@error</div>
+    <Card><CardContent>@error</CardContent></Card>
 }
 else if (tasks.Count == 0)
 {
-    <div class="card">
-        <div class="empty-state">No tasks yet.</div>
-    </div>
+    <Card><CardContent>No tasks yet.</CardContent></Card>
 }
 else
 {
-    <div class="card">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Task</th>
-                    <th>Status</th>
-                    <th>Type</th>
-                    <th>Progress</th>
-                    <th>Started</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var task in tasks)
-                {
-                    <tr>
-                        <td>@task.Name</td>
-                        <td>
-                            @if (task.Status == BackupTaskStatus.Failed)
-                            {
-                                <button type="button"
-                                        class="badge badge-button danger"
-                                        @onclick="() => ShowFailure(task)">
-                                    Failed
-                                </button>
-                            }
-                            else
-                            {
-                                @GetStatusBadge(task.Status)
-                            }
-                        </td>
-                        <td>@GetTriggerBadge(task.Trigger)</td>
-                        <td>@task.Progress%</td>
-                        <td>@(task.StartedAt?.ToLocalTime().ToString("g") ?? "-")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
+    <Card>
+        <CardContent>
+            <table>
+                <thead><tr><th>Task</th><th>Status</th><th>Type</th><th>Progress</th><th>Started</th></tr></thead>
+                <tbody>
+                    @foreach (var task in tasks)
+                    {
+                        <tr>
+                            <td>@task.Name</td>
+                            <td>
+                                @if (task.Status == BackupTaskStatus.Failed)
+                                {
+                                    <Badge Variant="BadgeVariant.Destructive">Failed: @(string.IsNullOrWhiteSpace(task.Message) ? "No details" : task.Message)</Badge>
+                                }
+                                else
+                                {
+                                    @GetStatusBadge(task.Status)
+                                }
+                            </td>
+                            <td>@GetTriggerBadge(task.Trigger)</td>
+                            <td>@task.Progress%</td>
+                            <td>@(task.StartedAt?.ToLocalTime().ToString("g") ?? "-")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </CardContent>
+    </Card>
 }
 
 @code {
     private List<BackupTaskDto> tasks = new();
     private bool isLoading = true;
     private string? error;
-    private bool isFailureDialogOpen;
-    private string failureTitle = "Task Failure";
-    private string failureMessage = string.Empty;
     private bool isRefreshing;
     private CancellationTokenSource? refreshCts;
     private PeriodicTimer? refreshTimer;
@@ -147,54 +134,34 @@ else
         }
     }
 
-    private void ShowFailure(string title, string? message)
-    {
-        failureTitle = title;
-        failureMessage = string.IsNullOrWhiteSpace(message)
-            ? "No additional details were provided."
-            : message;
-        isFailureDialogOpen = true;
-    }
-
-    private void ShowFailure(BackupTaskDto task)
-    {
-        ShowFailure($"Task failed: {task.Name}", task.Message);
-    }
-
-    private Task CloseFailure()
-    {
-        isFailureDialogOpen = false;
-        return Task.CompletedTask;
-    }
-
     private static RenderFragment GetStatusBadge(BackupTaskStatus status) => builder =>
     {
-        var (label, css) = status switch
+        var (label, variant) = status switch
         {
-            BackupTaskStatus.Success => ("Completed", "success"),
-            BackupTaskStatus.Running => ("Running", "warning"),
-            BackupTaskStatus.Failed => ("Failed", "danger"),
-            _ => ("Pending", "neutral")
+            BackupTaskStatus.Success => ("Completed", BadgeVariant.Default),
+            BackupTaskStatus.Running => ("Running", BadgeVariant.Secondary),
+            BackupTaskStatus.Failed => ("Failed", BadgeVariant.Destructive),
+            _ => ("Pending", BadgeVariant.Outline)
         };
 
-        builder.OpenElement(0, "span");
-        builder.AddAttribute(1, "class", $"badge {css}");
-        builder.AddContent(2, label);
-        builder.CloseElement();
+        builder.OpenComponent<Badge>(0);
+        builder.AddAttribute(1, "Variant", variant);
+        builder.AddAttribute(2, "ChildContent", (RenderFragment)(b2 => b2.AddContent(0, label)));
+        builder.CloseComponent();
     };
 
     private static RenderFragment GetTriggerBadge(BackupTaskTrigger trigger) => builder =>
     {
-        var (label, css) = trigger switch
+        var (label, variant) = trigger switch
         {
-            BackupTaskTrigger.Scheduled => ("Scheduled", "warning"),
-            _ => ("Manual", "neutral")
+            BackupTaskTrigger.Scheduled => ("Scheduled", BadgeVariant.Secondary),
+            _ => ("Manual", BadgeVariant.Outline)
         };
 
-        builder.OpenElement(0, "span");
-        builder.AddAttribute(1, "class", $"badge small {css}");
-        builder.AddContent(2, label);
-        builder.CloseElement();
+        builder.OpenComponent<Badge>(0);
+        builder.AddAttribute(1, "Variant", variant);
+        builder.AddAttribute(2, "ChildContent", (RenderFragment)(b2 => b2.AddContent(0, label)));
+        builder.CloseComponent();
     };
 
     public ValueTask DisposeAsync()
@@ -205,8 +172,3 @@ else
         return ValueTask.CompletedTask;
     }
 }
-
-<FailureDialog Open="@isFailureDialogOpen"
-               Title="@failureTitle"
-               Message="@failureMessage"
-               OnClose="CloseFailure" />

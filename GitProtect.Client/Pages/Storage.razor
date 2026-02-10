@@ -4,74 +4,52 @@
 
 <PageTitle>Storage</PageTitle>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Storage</h1>
-        <p class="page-subtitle">S3 capacity, usage, and last verification.</p>
-    </div>
-    <div style="display:flex; gap:12px;">
-        @if (retentionPolicy?.IsEnabled == true)
-        {
-            <button class="button" @onclick="PruneAsync" disabled="@isPruneBusy">Prune</button>
-        }
-        <button class="button secondary" @onclick="LoadAsync" disabled="@isLoading">Refresh</button>
-    </div>
-</div>
+<Card>
+    <CardHeader>
+        <CardTitle>Storage</CardTitle>
+        <CardDescription>S3 capacity, usage, and last verification.</CardDescription>
+    </CardHeader>
+    <CardContent>
+        <div>
+            @if (retentionPolicy?.IsEnabled == true)
+            {
+                <Button @onclick="PruneAsync" Disabled="@isPruneBusy">Prune</Button>
+            }
+            <Button Variant="ButtonVariant.Secondary" @onclick="LoadAsync" Disabled="@isLoading">Refresh</Button>
+        </div>
+    </CardContent>
+</Card>
+
+<Separator />
 
 @if (!string.IsNullOrWhiteSpace(pruneError))
 {
-    <div class="card" style="margin-bottom: 16px;">@pruneError</div>
+    <Badge Variant="BadgeVariant.Destructive">@pruneError</Badge>
 }
 else if (!string.IsNullOrWhiteSpace(pruneMessage))
 {
-    <div class="card" style="margin-bottom: 16px;">@pruneMessage</div>
+    <Badge>@pruneMessage</Badge>
 }
 
 @if (isLoading)
 {
-    <div class="card">Loading storage...</div>
+    <Card><CardContent>Loading storage...</CardContent></Card>
 }
 else if (!string.IsNullOrWhiteSpace(error))
 {
-    <div class="card">@error</div>
+    <Card><CardContent>@error</CardContent></Card>
 }
 else if (storage?.Config is null)
 {
-    <div class="card">
-        <div class="empty-state">Storage is not configured. Go to <a href="/settings">Settings</a>.</div>
-    </div>
+    <Card><CardContent>Storage is not configured. Go to <a href="/settings">Settings</a>.</CardContent></Card>
 }
 else
 {
     var config = storage.Config;
-    <div class="card-grid">
-        <div class="card">
-            <p class="card-title">Bucket</p>
-            <div class="stat-value">@config.Bucket</div>
-            <div class="stat-sub">@config.Region</div>
-        </div>
-        <div class="card">
-            <p class="card-title">Used</p>
-            <div class="stat-value">@FormatBytes(storage.TotalBytes)</div>
-            <div class="stat-sub">Total mirror uploads</div>
-        </div>
-        <div class="card">
-            <p class="card-title">Last Verify</p>
-            <div class="stat-value">@(config.VerifiedAt?.ToLocalTime().ToString("g") ?? "Never")</div>
-            <div class="stat-sub">Endpoint: @config.Endpoint</div>
-        </div>
-    </div>
-
-    <div class="card" style="margin-top: 24px;">
-        <p class="card-title">Storage Trend</p>
-        <div class="chart">
-            <div class="chart-bar" style="height: 30%;"><span>Jan</span></div>
-            <div class="chart-bar" style="height: 45%;"><span>Feb</span></div>
-            <div class="chart-bar" style="height: 55%;"><span>Mar</span></div>
-            <div class="chart-bar" style="height: 70%;"><span>Apr</span></div>
-            <div class="chart-bar" style="height: 80%;"><span>May</span></div>
-            <div class="chart-bar" style="height: 90%;"><span>Jun</span></div>
-        </div>
+    <div>
+        <Card><CardHeader><CardTitle>Bucket</CardTitle></CardHeader><CardContent>@config.Bucket (@config.Region)</CardContent></Card>
+        <Card><CardHeader><CardTitle>Used</CardTitle></CardHeader><CardContent>@FormatBytes(storage.TotalBytes)</CardContent></Card>
+        <Card><CardHeader><CardTitle>Last Verify</CardTitle></CardHeader><CardContent>@(config.VerifiedAt?.ToLocalTime().ToString("g") ?? "Never")</CardContent></Card>
     </div>
 }
 
@@ -84,10 +62,7 @@ else
     private string? pruneMessage;
     private string? pruneError;
 
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAsync();
-    }
+    protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
