@@ -80,7 +80,7 @@
                     <Badge Variant="BadgeVariant.Destructive">@retentionError</Badge>
                 }
                 <p>Enabled</p><Switch @bind-Checked="retentionEnabled" />
-                <p>Retention Days</p><Input @bind-Value="retentionDays" Type="InputType.Number" Disabled="@(!retentionEnabled)" />
+                <p>Retention Days</p><Input @bind-Value="retentionDaysText" Type="InputType.Number" Disabled="@(!retentionEnabled)" />
                 <div><Button @onclick="SaveRetention" Disabled="@isRetentionBusy">Save Retention</Button></div>
             </CardContent>
         </Card>
@@ -118,6 +118,7 @@
 
     private bool retentionEnabled;
     private int retentionDays = DefaultRetentionDays;
+    private string retentionDaysText = DefaultRetentionDays.ToString();
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,6 +153,7 @@
         {
             retentionEnabled = retention.IsEnabled;
             retentionDays = retention.RetentionDays;
+            retentionDaysText = retention.RetentionDays.ToString();
         }
     }
 
@@ -248,6 +250,14 @@
     private async Task SaveRetention()
     {
         retentionError = null;
+
+        if (!int.TryParse(retentionDaysText, out var parsedRetentionDays) || parsedRetentionDays < 1)
+        {
+            retentionError = "Retention days must be a positive whole number.";
+            return;
+        }
+
+        retentionDays = parsedRetentionDays;
         isRetentionBusy = true;
         try
         {
@@ -260,6 +270,7 @@
 
             retentionEnabled = result.Data.IsEnabled;
             retentionDays = result.Data.RetentionDays;
+            retentionDaysText = result.Data.RetentionDays.ToString();
         }
         finally
         {
