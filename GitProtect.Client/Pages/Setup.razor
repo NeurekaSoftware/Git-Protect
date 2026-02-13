@@ -5,98 +5,89 @@
 
 <PageTitle>Setup</PageTitle>
 
-<div class="space-y-6 max-w-3xl">
-    <Card>
-        <CardHeader>
-            <div>
-                <CardTitle>Setup Wizard</CardTitle>
-                <CardDescription>Connect a Git provider first, then verify your S3 destination.</CardDescription>
-            </div>
-            <Badge Variant="@(step == 1 ? BadgeVariant.Secondary : BadgeVariant.Outline)">Step @step of 2</Badge>
-        </CardHeader>
-    </Card>
+<MudStack Spacing="3">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">Setup Wizard</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Connect a Git provider first, then verify your S3 destination.</MudText>
+            </MudStack>
+            <MudChip T="string" Color="Color.Primary" Variant="Variant.Filled">Step @step of 2</MudChip>
+        </MudStack>
+    </MudPaper>
+
+    <MudProgressLinear Color="Color.Primary" Value="@(step * 50)" />
 
     @if (!string.IsNullOrWhiteSpace(error))
     {
-        <Badge Variant="BadgeVariant.Destructive">@error</Badge>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
     }
 
     @if (step == 1)
     {
-        <Card>
-            <CardHeader>
-                <CardTitle>Provider Connection</CardTitle>
-                <CardDescription>Use an API key or token with repository read access.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div class="space-y-4">
-                    <div>
-                        <label class="text-sm font-medium">Provider</label>
-                        <select class="mt-1 w-full rounded-md border bg-background px-3 py-2" @bind="selectedProvider" @bind:after="OnProviderChanged">
-                            <option value="@ProviderType.GitHub">GitHub</option>
-                            <option value="@ProviderType.GitLab">GitLab</option>
-                            <option value="@ProviderType.Forgejo">Forgejo</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">Instance URL</label>
-                        <Input @bind-Value="baseUrl" class="mt-1" />
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">Username</label>
-                        <Input @bind-Value="username" class="mt-1" />
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">API Key</label>
-                        <Input @bind-Value="apiKey" Type="InputType.Password" class="mt-1" />
-                    </div>
-                    <Button @onclick="ContinueToStorage" Disabled="@isBusy">Continue to Storage</Button>
-                </div>
-            </CardContent>
-        </Card>
+        <MudPaper Elevation="1" Class="pa-4">
+            <MudStack Spacing="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6">Provider Connection</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Use an API key or token with repository read access.</MudText>
+                </MudStack>
+
+                <MudSelect T="ProviderType" Label="Provider" Value="selectedProvider" ValueChanged="OnProviderChanged" Disabled="@isBusy">
+                    <MudSelectItem Value="@ProviderType.GitHub">GitHub</MudSelectItem>
+                    <MudSelectItem Value="@ProviderType.GitLab">GitLab</MudSelectItem>
+                    <MudSelectItem Value="@ProviderType.Forgejo">Forgejo</MudSelectItem>
+                </MudSelect>
+
+                <MudTextField T="string" Label="Instance URL" @bind-Value="baseUrl" Disabled="@isBusy" />
+                <MudTextField T="string" Label="Username" @bind-Value="username" Disabled="@isBusy" />
+                <MudTextField T="string" Label="API Key" InputType="MudBlazor.InputType.Password" @bind-Value="apiKey" Disabled="@isBusy" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.NavigateNext"
+                           OnClick="ContinueToStorage"
+                           Disabled="@isBusy">
+                    Continue to Storage
+                </MudButton>
+            </MudStack>
+        </MudPaper>
     }
     else
     {
-        <Card>
-            <CardHeader>
-                <CardTitle>Storage Connection</CardTitle>
-                <CardDescription>Configure your S3-compatible storage endpoint.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div class="space-y-4">
-                    <div>
-                        <label class="text-sm font-medium">Endpoint</label>
-                        <Input @bind-Value="s3Endpoint" class="mt-1" />
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">Region</label>
-                        <Input @bind-Value="s3Region" class="mt-1" />
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">Bucket</label>
-                        <Input @bind-Value="s3Bucket" class="mt-1" />
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">Access Key</label>
-                        <Input @bind-Value="s3AccessKey" class="mt-1" />
-                    </div>
-                    <div>
-                        <label class="text-sm font-medium">Secret Key</label>
-                        <Input @bind-Value="s3SecretKey" Type="InputType.Password" class="mt-1" />
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <Checkbox @bind-Checked="s3UsePathStyle" />
-                        <label class="text-sm font-medium">Use path style</label>
-                    </div>
-                    <div class="flex gap-2">
-                        <Button Variant="ButtonVariant.Secondary" @onclick="() => step = 1" Disabled="@isBusy">Back</Button>
-                        <Button @onclick="SaveStorage" Disabled="@isBusy">Verify &amp; Finish</Button>
-                    </div>
-                </div>
-            </CardContent>
-        </Card>
+        <MudPaper Elevation="1" Class="pa-4">
+            <MudStack Spacing="2">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6">Storage Connection</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Configure your S3-compatible storage endpoint.</MudText>
+                </MudStack>
+
+                <MudTextField T="string" Label="Endpoint" @bind-Value="s3Endpoint" Disabled="@isBusy" />
+                <MudTextField T="string" Label="Region" @bind-Value="s3Region" Disabled="@isBusy" />
+                <MudTextField T="string" Label="Bucket" @bind-Value="s3Bucket" Disabled="@isBusy" />
+                <MudTextField T="string" Label="Access Key" @bind-Value="s3AccessKey" Disabled="@isBusy" />
+                <MudTextField T="string" Label="Secret Key" InputType="MudBlazor.InputType.Password" @bind-Value="s3SecretKey" Disabled="@isBusy" />
+                <MudCheckBox T="bool" Label="Use path style" @bind-Value="s3UsePathStyle" Disabled="@isBusy" />
+
+                <MudStack Row="true" Spacing="1">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.ArrowBack"
+                               OnClick="BackToProvider"
+                               Disabled="@isBusy">
+                        Back
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Check"
+                               OnClick="SaveStorage"
+                               Disabled="@isBusy">
+                        Verify and Finish
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
     }
-</div>
+</MudStack>
 
 @code {
     private int step = 1;
@@ -136,6 +127,11 @@
         }
     }
 
+    private void BackToProvider()
+    {
+        step = 1;
+    }
+
     private async Task SaveStorage()
     {
         error = null;
@@ -157,8 +153,9 @@
         }
     }
 
-    private Task OnProviderChanged()
+    private Task OnProviderChanged(ProviderType provider)
     {
+        selectedProvider = provider;
         baseUrl = selectedProvider switch
         {
             ProviderType.GitHub => "https://github.com",

@@ -4,104 +4,105 @@
 
 <PageTitle>Settings</PageTitle>
 
-<div class="space-y-6 max-w-4xl">
-    <Card>
-        <CardHeader>
-            <CardTitle>Settings</CardTitle>
-            <CardDescription>Manage provider, storage, schedule, and retention policy.</CardDescription>
-        </CardHeader>
-    </Card>
+<MudStack Spacing="3">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudText Typo="Typo.h4">Settings</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Manage provider, storage, schedule, and retention policy.</MudText>
+    </MudPaper>
 
-    <Tabs DefaultValue="provider" Class="w-full">
-        <TabsList>
-            <TabsTrigger Value="provider">Provider</TabsTrigger>
-            <TabsTrigger Value="storage">Storage</TabsTrigger>
-            <TabsTrigger Value="schedule">Schedule</TabsTrigger>
-            <TabsTrigger Value="retention">Retention</TabsTrigger>
-        </TabsList>
+    <MudTabs Rounded="true" Elevation="1" PanelClass="pa-4">
+        <MudTabPanel Text="Provider">
+            <MudStack Spacing="2">
+                @if (!string.IsNullOrWhiteSpace(providerError))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@providerError</MudAlert>
+                }
 
-        <TabsContent Value="provider">
-            <Card>
-                <CardHeader><CardTitle>Provider Settings</CardTitle></CardHeader>
-                <CardContent>
-                    <div class="space-y-4">
-                        @if (!string.IsNullOrWhiteSpace(providerError))
-                        {
-                            <Badge Variant="BadgeVariant.Destructive">@providerError</Badge>
-                        }
-                        <div>
-                            <label class="text-sm font-medium">Provider</label>
-                            <select class="mt-1 w-full rounded-md border bg-background px-3 py-2" @bind="selectedProvider" @bind:after="OnProviderSelectionChanged">
-                                <option value="@ProviderType.GitHub">GitHub</option>
-                                <option value="@ProviderType.GitLab">GitLab</option>
-                                <option value="@ProviderType.Forgejo">Forgejo</option>
-                            </select>
-                        </div>
-                        <div><label class="text-sm font-medium">Instance URL</label><Input @bind-Value="providerBaseUrl" class="mt-1" /></div>
-                        <div><label class="text-sm font-medium">Username</label><Input @bind-Value="providerUsername" class="mt-1" /></div>
-                        <div><label class="text-sm font-medium">API Key</label><Input @bind-Value="providerApiKey" Type="InputType.Password" class="mt-1" /></div>
-                        <Button @onclick="SaveProvider" Disabled="@isProviderBusy">Save Provider</Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </TabsContent>
+                <MudSelect T="ProviderType" Label="Provider" Value="selectedProvider" ValueChanged="OnProviderSelectionChanged" Disabled="@isProviderBusy">
+                    <MudSelectItem Value="@ProviderType.GitHub">GitHub</MudSelectItem>
+                    <MudSelectItem Value="@ProviderType.GitLab">GitLab</MudSelectItem>
+                    <MudSelectItem Value="@ProviderType.Forgejo">Forgejo</MudSelectItem>
+                </MudSelect>
 
-        <TabsContent Value="storage">
-            <Card>
-                <CardHeader><CardTitle>S3 Storage</CardTitle></CardHeader>
-                <CardContent>
-                    <div class="space-y-4">
-                        @if (!string.IsNullOrWhiteSpace(storageError))
-                        {
-                            <Badge Variant="BadgeVariant.Destructive">@storageError</Badge>
-                        }
-                        <div><label class="text-sm font-medium">Endpoint</label><Input @bind-Value="storageEndpoint" class="mt-1" /></div>
-                        <div><label class="text-sm font-medium">Region</label><Input @bind-Value="storageRegion" class="mt-1" /></div>
-                        <div><label class="text-sm font-medium">Bucket</label><Input @bind-Value="storageBucket" class="mt-1" /></div>
-                        <div><label class="text-sm font-medium">Access Key</label><Input @bind-Value="storageAccessKey" class="mt-1" /></div>
-                        <div><label class="text-sm font-medium">Secret Key</label><Input @bind-Value="storageSecretKey" Type="InputType.Password" class="mt-1" /></div>
-                        <div class="flex items-center gap-2"><Checkbox @bind-Checked="storageUsePathStyle" /><label class="text-sm font-medium">Use path style</label></div>
-                        <Button @onclick="SaveStorage" Disabled="@isStorageBusy">Save Storage</Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </TabsContent>
+                <MudTextField T="string" Label="Instance URL" @bind-Value="providerBaseUrl" Disabled="@isProviderBusy" />
+                <MudTextField T="string" Label="Username" @bind-Value="providerUsername" Disabled="@isProviderBusy" />
+                <MudTextField T="string" Label="API Key" InputType="MudBlazor.InputType.Password" @bind-Value="providerApiKey" Disabled="@isProviderBusy" />
 
-        <TabsContent Value="schedule">
-            <Card>
-                <CardHeader><CardTitle>Backup Schedule</CardTitle></CardHeader>
-                <CardContent>
-                    <div class="space-y-4">
-                        @if (!string.IsNullOrWhiteSpace(scheduleError))
-                        {
-                            <Badge Variant="BadgeVariant.Destructive">@scheduleError</Badge>
-                        }
-                        <div class="flex items-center gap-2"><Switch @bind-Checked="scheduleEnabled" /><label class="text-sm font-medium">Enable scheduled backups</label></div>
-                        <div><label class="text-sm font-medium">Cron Expression</label><Input @bind-Value="scheduleCron" class="mt-1" /></div>
-                        <Button @onclick="SaveSchedule" Disabled="@isScheduleBusy">Save Schedule</Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </TabsContent>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveProvider"
+                           Disabled="@isProviderBusy">
+                    Save Provider
+                </MudButton>
+            </MudStack>
+        </MudTabPanel>
 
-        <TabsContent Value="retention">
-            <Card>
-                <CardHeader><CardTitle>Retention Policy</CardTitle></CardHeader>
-                <CardContent>
-                    <div class="space-y-4">
-                        @if (!string.IsNullOrWhiteSpace(retentionError))
-                        {
-                            <Badge Variant="BadgeVariant.Destructive">@retentionError</Badge>
-                        }
-                        <div class="flex items-center gap-2"><Switch @bind-Checked="retentionEnabled" /><label class="text-sm font-medium">Enable retention</label></div>
-                        <div><label class="text-sm font-medium">Retention Days</label><Input @bind-Value="retentionDaysText" Type="InputType.Number" Disabled="@(!retentionEnabled)" class="mt-1" /></div>
-                        <Button @onclick="SaveRetention" Disabled="@isRetentionBusy">Save Retention</Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </TabsContent>
-    </Tabs>
-</div>
+        <MudTabPanel Text="Storage">
+            <MudStack Spacing="2">
+                @if (!string.IsNullOrWhiteSpace(storageError))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@storageError</MudAlert>
+                }
+
+                <MudTextField T="string" Label="Endpoint" @bind-Value="storageEndpoint" Disabled="@isStorageBusy" />
+                <MudTextField T="string" Label="Region" @bind-Value="storageRegion" Disabled="@isStorageBusy" />
+                <MudTextField T="string" Label="Bucket" @bind-Value="storageBucket" Disabled="@isStorageBusy" />
+                <MudTextField T="string" Label="Access Key" @bind-Value="storageAccessKey" Disabled="@isStorageBusy" />
+                <MudTextField T="string" Label="Secret Key" InputType="MudBlazor.InputType.Password" @bind-Value="storageSecretKey" Disabled="@isStorageBusy" />
+                <MudCheckBox T="bool" Label="Use path style" @bind-Value="storageUsePathStyle" Disabled="@isStorageBusy" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveStorage"
+                           Disabled="@isStorageBusy">
+                    Save Storage
+                </MudButton>
+            </MudStack>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Schedule">
+            <MudStack Spacing="2">
+                @if (!string.IsNullOrWhiteSpace(scheduleError))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@scheduleError</MudAlert>
+                }
+
+                <MudSwitch T="bool" Label="Enable scheduled backups" @bind-Value="scheduleEnabled" Disabled="@isScheduleBusy" />
+                <MudTextField T="string" Label="Cron Expression" @bind-Value="scheduleCron" Disabled="@isScheduleBusy" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveSchedule"
+                           Disabled="@isScheduleBusy">
+                    Save Schedule
+                </MudButton>
+            </MudStack>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Retention">
+            <MudStack Spacing="2">
+                @if (!string.IsNullOrWhiteSpace(retentionError))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@retentionError</MudAlert>
+                }
+
+                <MudSwitch T="bool" Label="Enable retention" @bind-Value="retentionEnabled" Disabled="@isRetentionBusy" />
+                <MudTextField T="string" Label="Retention Days" @bind-Value="retentionDaysText" Disabled="@(!retentionEnabled || isRetentionBusy)" />
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           OnClick="SaveRetention"
+                           Disabled="@isRetentionBusy">
+                    Save Retention
+                </MudButton>
+            </MudStack>
+        </MudTabPanel>
+    </MudTabs>
+</MudStack>
 
 @code {
     private List<ProviderStatusDto> providers = new();
@@ -143,34 +144,79 @@
 
     private async Task LoadAsync()
     {
-        providers = await Api.GetProvidersAsync();
+        providerError = null;
+        storageError = null;
+        scheduleError = null;
+        retentionError = null;
+
+        try
+        {
+            providers = await Api.GetProvidersAsync();
+        }
+        catch (Exception ex)
+        {
+            providers = new();
+            providerError = GetLoadError(ex, "Unable to load provider settings.");
+        }
+
         ApplyProviderSelection();
 
-        var storage = await Api.GetStorageAsync();
-        if (storage?.Config is not null)
+        try
         {
-            storageEndpoint = storage.Config.Endpoint;
-            storageRegion = storage.Config.Region;
-            storageBucket = storage.Config.Bucket;
-            storageAccessKey = storage.Config.AccessKeyId;
-            storageSecretKey = storage.Config.SecretAccessKey;
-            storageUsePathStyle = storage.Config.UsePathStyle;
+            var storage = await Api.GetStorageAsync();
+            if (storage?.Config is not null)
+            {
+                storageEndpoint = storage.Config.Endpoint;
+                storageRegion = storage.Config.Region;
+                storageBucket = storage.Config.Bucket;
+                storageAccessKey = storage.Config.AccessKeyId;
+                storageSecretKey = storage.Config.SecretAccessKey;
+                storageUsePathStyle = storage.Config.UsePathStyle;
+            }
+        }
+        catch (Exception ex)
+        {
+            storageError = GetLoadError(ex, "Unable to load storage settings.");
         }
 
-        var schedule = await Api.GetBackupScheduleAsync();
-        if (schedule is not null)
+        try
         {
-            scheduleEnabled = schedule.IsEnabled;
-            scheduleCron = schedule.CronExpression;
+            var schedule = await Api.GetBackupScheduleAsync();
+            if (schedule is not null)
+            {
+                scheduleEnabled = schedule.IsEnabled;
+                scheduleCron = schedule.CronExpression;
+            }
+        }
+        catch (Exception ex)
+        {
+            scheduleError = GetLoadError(ex, "Unable to load backup schedule settings.");
         }
 
-        var retention = await Api.GetRetentionPolicyAsync();
-        if (retention is not null)
+        try
         {
-            retentionEnabled = retention.IsEnabled;
-            retentionDays = retention.RetentionDays;
-            retentionDaysText = retention.RetentionDays.ToString();
+            var retention = await Api.GetRetentionPolicyAsync();
+            if (retention is not null)
+            {
+                retentionEnabled = retention.IsEnabled;
+                retentionDays = retention.RetentionDays;
+                retentionDaysText = retention.RetentionDays.ToString();
+            }
         }
+        catch (Exception ex)
+        {
+            retentionError = GetLoadError(ex, "Unable to load retention policy settings.");
+        }
+    }
+
+    private static string GetLoadError(Exception ex, string fallbackMessage)
+    {
+        if (ex is HttpRequestException { Message: { Length: > 0 } message })
+        {
+            return message;
+        }
+
+        return fallbackMessage;
     }
 
     private void ApplyProviderSelection()
@@ -195,8 +241,9 @@
         providerApiKey = string.Empty;
     }
 
-    private Task OnProviderSelectionChanged()
+    private Task OnProviderSelectionChanged(ProviderType provider)
     {
+        selectedProvider = provider;
         ApplyProviderSelection();
         return Task.CompletedTask;
     }

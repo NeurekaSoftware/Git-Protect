@@ -5,78 +5,91 @@
 
 <PageTitle>GitHub Backups</PageTitle>
 
-<div class="space-y-6">
-    <Card>
-        <CardHeader>
-            <div>
-                <CardTitle>GitHub Backups</CardTitle>
-                <CardDescription>API + git mirror backups with LFS support.</CardDescription>
-            </div>
-            <div class="flex gap-2">
-                <Button Variant="ButtonVariant.Secondary" @onclick="SyncRepos" Disabled="@(isSyncing || isLoading)">Sync Repos</Button>
-                <Button @onclick="RunBackup" Disabled="@(isProviderBackupRequested || IsProviderBackupRunning || isLoading)">Run Backup</Button>
-            </div>
-        </CardHeader>
-    </Card>
+<MudStack Spacing="3">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">GitHub Backups</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">API and git mirror backups with LFS support.</MudText>
+            </MudStack>
+
+            <MudStack Row="true" Spacing="1">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Sync"
+                           OnClick="SyncRepos"
+                           Disabled="@(isSyncing || isLoading)">
+                    Sync Repos
+                </MudButton>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           OnClick="RunBackup"
+                           Disabled="@(isProviderBackupRequested || IsProviderBackupRunning || isLoading)">
+                    Run Backup
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
 
     @if (isLoading)
     {
-        <Card><CardContent class="py-6 text-sm text-muted-foreground">Loading repositories...</CardContent></Card>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Loading repositories...</MudAlert>
     }
     else if (!string.IsNullOrWhiteSpace(error))
     {
-        <Card><CardContent class="py-6"><Badge Variant="BadgeVariant.Destructive">@error</Badge></CardContent></Card>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
     }
     else if (provider is null || !provider.IsVerified)
     {
-        <Card><CardContent class="py-6 text-sm text-muted-foreground">Connect GitHub in Setup or Settings to view repositories.</CardContent></Card>
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Connect GitHub in Setup or Settings to view repositories.</MudAlert>
     }
     else if (repositories.Count == 0)
     {
-        <Card><CardContent class="py-6 text-sm text-muted-foreground">No repositories found. Sync to pull your list.</CardContent></Card>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">No repositories found. Sync to pull your list.</MudAlert>
     }
     else
     {
-        <Card>
-            <CardContent>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="text-muted-foreground">
-                            <tr class="border-b">
-                                <th class="text-left py-2">Repository</th>
-                                <th class="text-left py-2">Status</th>
-                                <th class="text-left py-2">Last Backup</th>
-                                <th class="text-left py-2">Size</th>
-                                <th class="text-left py-2">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var repo in repositories)
-                            {
-                                <tr class="border-b last:border-0">
-                                    <td class="py-2">@repo.FullName</td>
-                                    <td class="py-2">
-                                        @if (repo.Status == BackupStatus.Failed)
-                                        {
-                                            <Badge Variant="BadgeVariant.Destructive">Failed: @(string.IsNullOrWhiteSpace(repo.LastBackupMessage) ? "No details" : repo.LastBackupMessage)</Badge>
-                                        }
-                                        else
-                                        {
-                                            @GetStatusBadge(repo.Status)
-                                        }
-                                    </td>
-                                    <td class="py-2">@(repo.LastBackupAt?.ToLocalTime().ToString("g") ?? "Never")</td>
-                                    <td class="py-2">@FormatBytes(repo.LastBackupSizeBytes)</td>
-                                    <td class="py-2"><Button Variant="ButtonVariant.Outline" @onclick="() => RunRepoBackup(repo.Id)" Disabled="@(IsRepoBackupDisabled(repo.Id))">Backup</Button></td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </CardContent>
-        </Card>
+        <MudPaper Elevation="1" Class="pa-2">
+            <MudTable Items="repositories" Dense="true" Hover="true" Bordered="true">
+                <HeaderContent>
+                    <MudTh>Repository</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Last Backup</MudTh>
+                    <MudTh>Size</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Repository">@context.FullName</MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.Status == BackupStatus.Failed)
+                        {
+                            <MudStack Spacing="1">
+                                <MudChip T="string" Color="Color.Error" Variant="Variant.Filled" Size="Size.Small">Failed</MudChip>
+                                <MudText Typo="Typo.caption">@(string.IsNullOrWhiteSpace(context.LastBackupMessage) ? "No details" : context.LastBackupMessage)</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="@GetStatusColor(context.Status)" Variant="Variant.Filled" Size="Size.Small">@GetStatusLabel(context.Status)</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Last Backup">@(context.LastBackupAt?.ToLocalTime().ToString("g") ?? "Never")</MudTd>
+                    <MudTd DataLabel="Size">@FormatBytes(context.LastBackupSizeBytes)</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Backup"
+                                   OnClick='() => RunRepoBackup(context.Id)'
+                                   Disabled="@(IsRepoBackupDisabled(context.Id))">
+                            Backup
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
     }
-</div>
+</MudStack>
 
 @code {
     private ProviderStatusDto? provider;
@@ -251,20 +264,20 @@
         return $"{size:0.#} {units[unitIndex]}";
     }
 
-    private static RenderFragment GetStatusBadge(BackupStatus status) => builder =>
+    private static string GetStatusLabel(BackupStatus status) => status switch
     {
-        var (label, variant) = status switch
-        {
-            BackupStatus.Success => ("Healthy", BadgeVariant.Default),
-            BackupStatus.Running => ("Running", BadgeVariant.Secondary),
-            BackupStatus.Failed => ("Failed", BadgeVariant.Destructive),
-            _ => ("Never", BadgeVariant.Outline)
-        };
+        BackupStatus.Success => "Healthy",
+        BackupStatus.Running => "Running",
+        BackupStatus.Failed => "Failed",
+        _ => "Never"
+    };
 
-        builder.OpenComponent<Badge>(0);
-        builder.AddAttribute(1, "Variant", variant);
-        builder.AddAttribute(2, "ChildContent", (RenderFragment)(b2 => b2.AddContent(0, label)));
-        builder.CloseComponent();
+    private static Color GetStatusColor(BackupStatus status) => status switch
+    {
+        BackupStatus.Success => Color.Success,
+        BackupStatus.Running => Color.Info,
+        BackupStatus.Failed => Color.Error,
+        _ => Color.Default
     };
 
     private bool IsProviderBackupRunning => tasks.Any(task =>

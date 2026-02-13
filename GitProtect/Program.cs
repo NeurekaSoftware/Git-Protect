@@ -5,14 +5,24 @@ using GitProtect.Data;
 using GitProtect.Endpoints;
 using GitProtect.Services;
 using Microsoft.EntityFrameworkCore;
+using MudBlazor.Services;
+using System.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Allow Docker-prefixed env vars (GITPROTECT__*) to override appsettings.
 builder.Configuration.AddEnvironmentVariables("GITPROTECT__");
 
+var sqliteConnectionString = ResolveSqliteConnectionString(builder.Configuration, builder.Environment);
+if (IsInMemorySqlite(sqliteConnectionString))
+{
+    throw new InvalidOperationException(
+        "In-memory SQLite is not supported for GitProtect runtime. Configure ConnectionStrings:GitProtectDb to a file-based database.");
+}
+
 builder.Services.AddRazorComponents()
     .AddInteractiveWebAssemblyComponents();
+builder.Services.AddMudServices();
 
 var apiBaseUri = ResolveApiBaseUri(builder.Configuration);
 
@@ -25,7 +35,7 @@ builder.Services.AddHttpClient<GitProtect.Client.Services.ApiClient>(client =>
     }
 });
 builder.Services.AddDbContext<GitProtectDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("GitProtectDb")));
+    options.UseSqlite(sqliteConnectionString));
 
 builder.Services.AddScoped<ProviderApiService>();
 builder.Services.AddScoped<S3StorageService>();
@@ -59,6 +69,19 @@ app.MapRazorComponents<App>()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(typeof(GitProtect.Client._Imports).Assembly);
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<GitProtectDbContext>();
+    db.Database.Migrate();
+    EnsureSqliteLegacySchema(db);
+}
+
+using (var verificationScope = app.Services.CreateScope())
+{
+    var db = verificationScope.ServiceProvider.GetRequiredService<GitProtectDbContext>();
+    _ = db.Repositories.Any();
+}
+
 app.Services.UseScheduler(scheduler =>
 {
     scheduler.Schedule<BackupScheduleInvoker>()
@@ -69,12 +92,6 @@ app.Services.UseScheduler(scheduler =>
         .Hourly()
         .PreventOverlapping("retention-policy");
 });
-
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<GitProtectDbContext>();
-    db.Database.Migrate();
-}
 
 app.Run();
 
@@ -124,4 +141,67 @@ static Uri NormalizeListenAddress(Uri uri)
     }
 
     return builder.Uri;
+}
+
+static string ResolveSqliteConnectionString(IConfiguration configuration, IWebHostEnvironment environment)
+{
+    var configured = configuration.GetConnectionString("GitProtectDb");
+    if (!string.IsNullOrWhiteSpace(configured))
+    {
+        return configured;
+    }
+
+    var dataDirectory = Directory.Exists("/data")
+        ? "/data"
+        : environment.ContentRootPath;
+
+    var databasePath = Path.Combine(dataDirectory, "gitprotect.db");
+    return $"Data Source={databasePath}";
+}
+
+static bool IsInMemorySqlite(string connectionString)
+{
+    return connectionString.Contains(":memory:", StringComparison.OrdinalIgnoreCase)
+        || connectionString.Contains("mode=memory", StringComparison.OrdinalIgnoreCase);
+}
+
+static void EnsureSqliteLegacySchema(GitProtectDbContext db)
+{
+    if (!db.Database.IsSqlite())
+    {
+        return;
+    }
+
+    var connection = db.Database.GetDbConnection();
+    if (connection.State != ConnectionState.Open)
+    {
+        connection.Open();
+    }
+
+    bool hasUsePathStyleColumn;
+    using (var tableInfoCommand = connection.CreateCommand())
+    {
+        tableInfoCommand.CommandText = "PRAGMA table_info('S3Configs');";
+        using var reader = tableInfoCommand.ExecuteReader();
+        hasUsePathStyleColumn = false;
+
+        while (reader.Read())
+        {
+            var columnName = reader.GetString(1);
+            if (string.Equals(columnName, "UsePathStyle", StringComparison.OrdinalIgnoreCase))
+            {
+                hasUsePathStyleColumn = true;
+                break;
+            }
+        }
+    }
+
+    if (hasUsePathStyleColumn)
+    {
+        return;
+    }
+
+    using var addColumnCommand = connection.CreateCommand();
+    addColumnCommand.CommandText = "ALTER TABLE \"S3Configs\" ADD COLUMN \"UsePathStyle\" INTEGER NOT NULL DEFAULT 0;";
+    addColumnCommand.ExecuteNonQuery();
 }

@@ -3,15 +3,18 @@
 
 <PageTitle>Not Found</PageTitle>
 
-<Card class="max-w-xl">
-    <CardHeader>
-        <CardTitle>Page Not Found</CardTitle>
-        <CardDescription>The page you are looking for does not exist or was moved.</CardDescription>
-    </CardHeader>
-    <CardContent>
-        <Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/")'>Back to Dashboard</Button>
-    </CardContent>
-</Card>
+<MudPaper Elevation="1" Class="pa-6">
+    <MudStack Spacing="2">
+        <MudText Typo="Typo.h4">Page Not Found</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">The page you are looking for does not exist or was moved.</MudText>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick='() => Nav.NavigateTo("/")'>
+            Back to Dashboard
+        </MudButton>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Inject] private NavigationManager Nav { get; set; } = default!;

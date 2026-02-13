@@ -6,10 +6,9 @@
 - Use Semantic Versioning for releases.
 - Always run a build at the end of tasks to check for errors or warnings.
 - Fix any errors or warnings discovered during the build before finishing.
-- Use https://blazorblueprintui.com for UI.
-- Use https://blazorblueprintui.com/blueprints/ for blueprints.
-- Use https://blazorblueprintui.com/components/ for components.
-- Always use examples from the components page when designing UI.
-- Never add custom CSS or JS.
-- Never create custom components unless they consist only of BlazorBlueprint components.
+- Use MudBlazor for UI.
+- Build dashboard-style pages with MudBlazor layout/components.
+- Dark mode must be the default UI mode.
+- Never add custom CSS or JS for styling.
+- Remove and avoid BlazorBlueprint libraries/components.
 </INSTRUCTIONS>

@@ -4,66 +4,86 @@
 
 <PageTitle>Storage</PageTitle>
 
-<div class="space-y-6">
-    <Card>
-        <CardHeader>
-            <div>
-                <CardTitle>Storage Overview</CardTitle>
-                <CardDescription>S3 capacity, usage, and retention management.</CardDescription>
-            </div>
-            <div class="flex gap-2">
+<MudStack Spacing="3">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">Storage Overview</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">S3 capacity, usage, and retention management.</MudText>
+            </MudStack>
+
+            <MudStack Row="true" Spacing="1">
                 @if (retentionPolicy?.IsEnabled == true)
                 {
-                    <Button @onclick="PruneAsync" Disabled="@isPruneBusy">Prune</Button>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Warning"
+                               StartIcon="@Icons.Material.Filled.DeleteSweep"
+                               OnClick="PruneAsync"
+                               Disabled="@isPruneBusy">
+                        Prune
+                    </MudButton>
                 }
-                <Button Variant="ButtonVariant.Secondary" @onclick="LoadAsync" Disabled="@isLoading">Refresh</Button>
-            </div>
-        </CardHeader>
-    </Card>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadAsync"
+                           Disabled="@isLoading">
+                    Refresh
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
 
     @if (!string.IsNullOrWhiteSpace(pruneError))
     {
-        <Badge Variant="BadgeVariant.Destructive">@pruneError</Badge>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@pruneError</MudAlert>
     }
     else if (!string.IsNullOrWhiteSpace(pruneMessage))
     {
-        <Badge>@pruneMessage</Badge>
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@pruneMessage</MudAlert>
     }
 
     @if (isLoading)
     {
-        <Card><CardContent class="py-6 text-sm text-muted-foreground">Loading storage...</CardContent></Card>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Loading storage...</MudAlert>
     }
     else if (!string.IsNullOrWhiteSpace(error))
     {
-        <Card><CardContent class="py-6"><Badge Variant="BadgeVariant.Destructive">@error</Badge></CardContent></Card>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
     }
     else if (storage?.Config is null)
     {
-        <Card><CardContent class="py-6 text-sm text-muted-foreground">Storage is not configured. Go to Settings.</CardContent></Card>
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Storage is not configured. Go to Settings.</MudAlert>
     }
     else
     {
         var config = storage.Config;
-        <div class="grid gap-4 md:grid-cols-3">
-            <Card>
-                <CardHeader><CardTitle>Bucket</CardTitle></CardHeader>
-                <CardContent>
-                    <div class="text-base font-medium">@config.Bucket</div>
-                    <div class="text-sm text-muted-foreground">@config.Region</div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader><CardTitle>Used Space</CardTitle></CardHeader>
-                <CardContent><p class="text-2xl font-semibold">@FormatBytes(storage.TotalBytes)</p></CardContent>
-            </Card>
-            <Card>
-                <CardHeader><CardTitle>Last Verification</CardTitle></CardHeader>
-                <CardContent><p>@(config.VerifiedAt?.ToLocalTime().ToString("g") ?? "Never")</p></CardContent>
-            </Card>
-        </div>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Bucket</MudText>
+                    <MudText Typo="Typo.h6">@config.Bucket</MudText>
+                    <MudText Typo="Typo.body2">@config.Region</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Used Space</MudText>
+                    <MudText Typo="Typo.h4">@FormatBytes(storage.TotalBytes)</MudText>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Last Verification</MudText>
+                    <MudText Typo="Typo.h6">@(config.VerifiedAt?.ToLocalTime().ToString("g") ?? "Never")</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
     }
-</div>
+</MudStack>
 
 @code {
     private StorageDetailsDto? storage;

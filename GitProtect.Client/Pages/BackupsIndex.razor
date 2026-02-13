@@ -3,38 +3,65 @@
 
 <PageTitle>Backups</PageTitle>
 
-<div class="space-y-6">
-    <Card>
-        <CardHeader>
-            <CardTitle>Backups</CardTitle>
-            <CardDescription>Choose a provider and manage repository-level backup execution.</CardDescription>
-        </CardHeader>
-    </Card>
+<MudStack Spacing="3">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudText Typo="Typo.h4">Backups</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Choose a provider and manage repository-level backup execution.</MudText>
+    </MudPaper>
 
-    <div class="grid gap-4 md:grid-cols-3">
-        <Card>
-            <CardHeader>
-                <CardTitle>GitHub</CardTitle>
-                <CardDescription>Cloud-hosted repositories and organizations.</CardDescription>
-            </CardHeader>
-            <CardContent><Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/github")'>Open GitHub</Button></CardContent>
-        </Card>
-        <Card>
-            <CardHeader>
-                <CardTitle>GitLab</CardTitle>
-                <CardDescription>Groups and projects on GitLab instances.</CardDescription>
-            </CardHeader>
-            <CardContent><Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/gitlab")'>Open GitLab</Button></CardContent>
-        </Card>
-        <Card>
-            <CardHeader>
-                <CardTitle>Forgejo</CardTitle>
-                <CardDescription>Self-hosted Forgejo repositories.</CardDescription>
-            </CardHeader>
-            <CardContent><Button Variant="ButtonVariant.Outline" @onclick='() => Nav.NavigateTo("/backups/forgejo")'>Open Forgejo</Button></CardContent>
-        </Card>
-    </div>
-</div>
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="1" Class="pa-4">
+                <MudStack Spacing="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.h6">GitHub</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Cloud-hosted repositories and organizations.</MudText>
+                    </MudStack>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.NorthEast"
+                               OnClick='() => Nav.NavigateTo("/backups/github")'>
+                        Open GitHub
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="1" Class="pa-4">
+                <MudStack Spacing="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.h6">GitLab</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Groups and projects on GitLab instances.</MudText>
+                    </MudStack>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.NorthEast"
+                               OnClick='() => Nav.NavigateTo("/backups/gitlab")'>
+                        Open GitLab
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Elevation="1" Class="pa-4">
+                <MudStack Spacing="2">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.h6">Forgejo</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Self-hosted Forgejo repositories.</MudText>
+                    </MudStack>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.NorthEast"
+                               OnClick='() => Nav.NavigateTo("/backups/forgejo")'>
+                        Open Forgejo
+                    </MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>
 
 @code {
     [Inject] private NavigationManager Nav { get; set; } = default!;

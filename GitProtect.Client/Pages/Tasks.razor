@@ -5,71 +5,72 @@
 
 <PageTitle>Tasks</PageTitle>
 
-<div class="space-y-6">
-    <Card>
-        <CardHeader>
-            <div>
-                <CardTitle>Task Activity</CardTitle>
-                <CardDescription>Current and recent provider backup jobs.</CardDescription>
-            </div>
-            <Button Variant="ButtonVariant.Secondary" @onclick="() => LoadAsync(showLoading: true)" Disabled="@isLoading">Refresh</Button>
-        </CardHeader>
-    </Card>
+<MudStack Spacing="3">
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">Task Activity</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Current and recent provider backup jobs.</MudText>
+            </MudStack>
+
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick='() => LoadAsync(showLoading: true)'
+                       Disabled="@isLoading">
+                Refresh
+            </MudButton>
+        </MudStack>
+    </MudPaper>
 
     @if (isLoading)
     {
-        <Card><CardContent class="py-6 text-sm text-muted-foreground">Loading tasks...</CardContent></Card>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Loading tasks...</MudAlert>
     }
     else if (!string.IsNullOrWhiteSpace(error))
     {
-        <Card><CardContent class="py-6"><Badge Variant="BadgeVariant.Destructive">@error</Badge></CardContent></Card>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@error</MudAlert>
     }
     else if (tasks.Count == 0)
     {
-        <Card><CardContent class="py-6 text-sm text-muted-foreground">No tasks yet.</CardContent></Card>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">No tasks yet.</MudAlert>
     }
     else
     {
-        <Card>
-            <CardContent>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="text-muted-foreground">
-                            <tr class="border-b">
-                                <th class="text-left py-2">Task</th>
-                                <th class="text-left py-2">Status</th>
-                                <th class="text-left py-2">Trigger</th>
-                                <th class="text-left py-2">Progress</th>
-                                <th class="text-left py-2">Started</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var task in tasks)
-                            {
-                                <tr class="border-b last:border-0">
-                                    <td class="py-2">@task.Name</td>
-                                    <td class="py-2">
-                                        @if (task.Status == BackupTaskStatus.Failed)
-                                        {
-                                            <Badge Variant="BadgeVariant.Destructive">Failed: @(string.IsNullOrWhiteSpace(task.Message) ? "No details" : task.Message)</Badge>
-                                        }
-                                        else
-                                        {
-                                            @GetStatusBadge(task.Status)
-                                        }
-                                    </td>
-                                    <td class="py-2">@GetTriggerBadge(task.Trigger)</td>
-                                    <td class="py-2">@task.Progress%</td>
-                                    <td class="py-2">@(task.StartedAt?.ToLocalTime().ToString("g") ?? "-")</td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </CardContent>
-        </Card>
+        <MudPaper Elevation="1" Class="pa-2">
+            <MudTable Items="tasks" Dense="true" Hover="true" Bordered="true">
+                <HeaderContent>
+                    <MudTh>Task</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Trigger</MudTh>
+                    <MudTh>Progress</MudTh>
+                    <MudTh>Started</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Task">@context.Name</MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.Status == BackupTaskStatus.Failed)
+                        {
+                            <MudStack Spacing="1">
+                                <MudChip T="string" Color="Color.Error" Variant="Variant.Filled" Size="Size.Small">Failed</MudChip>
+                                <MudText Typo="Typo.caption">@(string.IsNullOrWhiteSpace(context.Message) ? "No details" : context.Message)</MudText>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="@GetTaskStatusColor(context.Status)" Variant="Variant.Filled" Size="Size.Small">@GetTaskStatusLabel(context.Status)</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Trigger">
+                        <MudChip T="string" Color="@GetTriggerColor(context.Trigger)" Variant="Variant.Outlined" Size="Size.Small">@GetTriggerLabel(context.Trigger)</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Progress">@context.Progress%</MudTd>
+                    <MudTd DataLabel="Started">@(context.StartedAt?.ToLocalTime().ToString("g") ?? "-")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudPaper>
     }
-</div>
+</MudStack>
 
 @code {
     private List<BackupTaskDto> tasks = new();
@@ -147,34 +148,32 @@
         }
     }
 
-    private static RenderFragment GetStatusBadge(BackupTaskStatus status) => builder =>
+    private static string GetTaskStatusLabel(BackupTaskStatus status) => status switch
     {
-        var (label, variant) = status switch
-        {
-            BackupTaskStatus.Success => ("Completed", BadgeVariant.Default),
-            BackupTaskStatus.Running => ("Running", BadgeVariant.Secondary),
-            BackupTaskStatus.Failed => ("Failed", BadgeVariant.Destructive),
-            _ => ("Pending", BadgeVariant.Outline)
-        };
-
-        builder.OpenComponent<Badge>(0);
-        builder.AddAttribute(1, "Variant", variant);
-        builder.AddAttribute(2, "ChildContent", (RenderFragment)(b2 => b2.AddContent(0, label)));
-        builder.CloseComponent();
+        BackupTaskStatus.Success => "Completed",
+        BackupTaskStatus.Running => "Running",
+        BackupTaskStatus.Failed => "Failed",
+        _ => "Pending"
     };
 
-    private static RenderFragment GetTriggerBadge(BackupTaskTrigger trigger) => builder =>
+    private static Color GetTaskStatusColor(BackupTaskStatus status) => status switch
     {
-        var (label, variant) = trigger switch
-        {
-            BackupTaskTrigger.Scheduled => ("Scheduled", BadgeVariant.Secondary),
-            _ => ("Manual", BadgeVariant.Outline)
-        };
+        BackupTaskStatus.Success => Color.Success,
+        BackupTaskStatus.Running => Color.Info,
+        BackupTaskStatus.Failed => Color.Error,
+        _ => Color.Default
+    };
 
-        builder.OpenComponent<Badge>(0);
-        builder.AddAttribute(1, "Variant", variant);
-        builder.AddAttribute(2, "ChildContent", (RenderFragment)(b2 => b2.AddContent(0, label)));
-        builder.CloseComponent();
+    private static string GetTriggerLabel(BackupTaskTrigger trigger) => trigger switch
+    {
+        BackupTaskTrigger.Scheduled => "Scheduled",
+        _ => "Manual"
+    };
+
+    private static Color GetTriggerColor(BackupTaskTrigger trigger) => trigger switch
+    {
+        BackupTaskTrigger.Scheduled => Color.Info,
+        _ => Color.Default
     };
 
     public ValueTask DisposeAsync()

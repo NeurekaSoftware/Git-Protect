@@ -1,109 +1,87 @@
 @inherits LayoutComponentBase
+@inject NavigationManager Nav
 
-<SidebarProvider>
-    <Sidebar>
-        <SidebarHeader>
-            <div class="flex items-center gap-3 px-2 h-12">
-                <div class="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-                    <LucideIcon Name="shield" class="h-4 w-4" />
-                </div>
-                <div class="flex flex-col">
-                    <span class="text-sm font-semibold">GitProtect</span>
-                    <span class="text-xs text-muted-foreground">Backup Console</span>
-                </div>
-            </div>
-        </SidebarHeader>
+<MudThemeProvider Theme="@AppTheme" IsDarkMode="true" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
 
-        <SidebarContent>
-            <SidebarGroup>
-                <SidebarGroupLabel>Workspace</SidebarGroupLabel>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton Href="/" IsActive="@(IsActive("/"))">
-                            <LucideIcon Name="layout-dashboard" class="h-4 w-4" />
-                            <span>Dashboard</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton Href="/backups" IsActive="@(IsActive("/backups"))">
-                            <LucideIcon Name="database-backup" class="h-4 w-4" />
-                            <span>Backups</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton Href="/storage" IsActive="@(IsActive("/storage"))">
-                            <LucideIcon Name="hard-drive" class="h-4 w-4" />
-                            <span>Storage</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton Href="/tasks" IsActive="@(IsActive("/tasks"))">
-                            <LucideIcon Name="list-checks" class="h-4 w-4" />
-                            <span>Tasks</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton Href="/settings" IsActive="@(IsActive("/settings"))">
-                            <LucideIcon Name="settings" class="h-4 w-4" />
-                            <span>Settings</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton Href="/setup" IsActive="@(IsActive("/setup"))">
-                            <LucideIcon Name="wrench" class="h-4 w-4" />
-                            <span>Setup</span>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-            </SidebarGroup>
-        </SidebarContent>
+<MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="ToggleDrawer" />
+        <MudText Typo="Typo.h6">GitProtect</MudText>
+        <MudSpacer />
+        <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" Size="Size.Small">Monitoring</MudChip>
+    </MudAppBar>
 
-        <SidebarFooter>
-            <DropdownMenu>
-                <DropdownMenuTrigger>
-                    <Button Variant="ButtonVariant.Ghost" Class="w-full justify-start gap-2 px-2 h-10">
-                        <Avatar Size="AvatarSize.Small">
-                            <AvatarFallback>GP</AvatarFallback>
-                        </Avatar>
-                        <div class="flex flex-col items-start text-left flex-1 min-w-0">
-                            <span class="text-sm font-medium truncate">GitProtect</span>
-                            <span class="text-xs text-muted-foreground truncate">Production ready</span>
-                        </div>
-                        <LucideIcon Name="chevrons-up-down" class="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent Side="PopoverSide.Top" Align="PopoverAlign.Start" MatchTriggerWidth="true">
-                    <DropdownMenuLabel>System Status</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem>Online</DropdownMenuItem>
-                    <DropdownMenuItem>Monitoring active</DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </SidebarFooter>
-    </Sidebar>
+    <MudDrawer @bind-Open="drawerOpen"
+               Elevation="1"
+               Variant="DrawerVariant.Responsive"
+               Breakpoint="Breakpoint.Md"
+               ClipMode="DrawerClipMode.Always">
+        <MudDrawerHeader>
+            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                <MudAvatar Variant="Variant.Filled" Color="Color.Primary" Size="Size.Medium">
+                    <MudIcon Icon="@Icons.Material.Filled.Security" />
+                </MudAvatar>
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.subtitle1">GitProtect</MudText>
+                    <MudText Typo="Typo.caption">Backup Dashboard</MudText>
+                </MudStack>
+            </MudStack>
+        </MudDrawerHeader>
 
-    <SidebarInset>
-        <div class="p-4 md:p-6">
+        <MudNavMenu Dense="true">
+            <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+
+            <MudNavGroup Title="Backups" Icon="@Icons.Material.Filled.BackupTable" Expanded="@IsBackupsSection">
+                <MudNavLink Href="/backups" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.ViewList">Overview</MudNavLink>
+                <MudNavLink Href="/backups/github" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Code">GitHub</MudNavLink>
+                <MudNavLink Href="/backups/gitlab" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.AccountTree">GitLab</MudNavLink>
+                <MudNavLink Href="/backups/forgejo" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Storage">Forgejo</MudNavLink>
+            </MudNavGroup>
+
+            <MudNavLink Href="/storage" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Cloud">Storage</MudNavLink>
+            <MudNavLink Href="/tasks" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Task">Tasks</MudNavLink>
+            <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Settings">Settings</MudNavLink>
+            <MudNavLink Href="/setup" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Build">Setup</MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
             @Body
-        </div>
-    </SidebarInset>
-</SidebarProvider>
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
 
 @code {
-    [Inject] private NavigationManager Nav { get; set; } = default!;
+    private bool drawerOpen = true;
 
-    private bool IsActive(string href)
+    private bool IsBackupsSection
     {
-        var relativePath = Nav.ToBaseRelativePath(Nav.Uri);
-        if (string.IsNullOrWhiteSpace(relativePath))
+        get
         {
-            relativePath = "/";
+            var relativePath = Nav.ToBaseRelativePath(Nav.Uri);
+            var pathOnly = relativePath.Split('?', '#')[0];
+            return string.IsNullOrWhiteSpace(pathOnly)
+                ? false
+                : pathOnly.StartsWith("backups", StringComparison.OrdinalIgnoreCase);
         }
+    }
 
-        var normalizedPath = relativePath.StartsWith('/') ? relativePath : $"/{relativePath}";
+    private static MudTheme AppTheme => new()
+    {
+        PaletteDark = new PaletteDark
+        {
+            Primary = Colors.Blue.Lighten1,
+            Secondary = Colors.Teal.Accent3,
+            Tertiary = Colors.Cyan.Lighten1
+        }
+    };
 
-        return href == "/"
-            ? normalizedPath == "/"
-            : normalizedPath.StartsWith(href, StringComparison.OrdinalIgnoreCase);
+    private void ToggleDrawer()
+    {
+        drawerOpen = !drawerOpen;
     }
 }
