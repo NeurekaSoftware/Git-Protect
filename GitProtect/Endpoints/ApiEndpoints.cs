@@ -233,7 +233,10 @@ public static class ApiEndpoints
         api.MapGet("/storage", async (GitProtectDbContext db, CancellationToken cancellationToken) =>
         {
             var storage = await db.S3Configs.AsNoTracking().FirstOrDefaultAsync(cancellationToken);
-            var totalBytes = await db.Repositories.SumAsync(r => r.LastBackupSizeBytes ?? 0, cancellationToken);
+            var totalBytes = (await db.Repositories
+                .AsNoTracking()
+                .Select(r => r.LastBackupSizeBytes)
+                .SumAsync(cancellationToken)) ?? 0;
             return new StorageDetailsDto(storage is null ? null : ToS3ConfigDto(storage), totalBytes, storage?.VerifiedAt);
         });
 

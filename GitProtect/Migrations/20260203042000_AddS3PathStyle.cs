@@ -1,9 +1,13 @@
+using GitProtect.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace GitProtect.Migrations;
 
+[DbContext(typeof(GitProtectDbContext))]
+[Migration("20260203042000_AddS3PathStyle")]
 public partial class AddS3PathStyle : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
