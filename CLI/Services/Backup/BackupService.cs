@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CLI.Configuration;
+using CLI.Configuration.Models;
 using CLI.Services.Git;
 using CLI.Services.Paths;
 using CLI.Services.Providers;
@@ -14,23 +15,25 @@ public sealed class BackupService
 
     private readonly BackupProviderClientFactory _providerFactory;
     private readonly IGitRepositoryService _gitRepositoryService;
-    private readonly IObjectStorageService _objectStorageService;
+    private readonly Func<StorageConfig, IObjectStorageService> _objectStorageServiceFactory;
     private readonly string _workingRoot;
 
     public BackupService(
         BackupProviderClientFactory providerFactory,
         IGitRepositoryService gitRepositoryService,
-        IObjectStorageService objectStorageService,
+        Func<StorageConfig, IObjectStorageService> objectStorageServiceFactory,
         string workingRoot)
     {
         _providerFactory = providerFactory;
         _gitRepositoryService = gitRepositoryService;
-        _objectStorageService = objectStorageService;
+        _objectStorageServiceFactory = objectStorageServiceFactory;
         _workingRoot = workingRoot;
     }
 
     public async Task RunAsync(Settings settings, CancellationToken cancellationToken)
     {
+        var objectStorageService = _objectStorageServiceFactory(settings.Storage);
+
         foreach (var backup in settings.Backups.Where(backup => backup?.Enabled != false))
         {
             if (backup is null || string.IsNullOrWhiteSpace(backup.Provider) || string.IsNullOrWhiteSpace(backup.Credential))
@@ -64,8 +67,8 @@ public sealed class BackupService
                             includeLfs: backup.Lfs == true,
                             cancellationToken);
 
-                        await _objectStorageService.UploadDirectoryAsync(localPath, backupPrefix, cancellationToken);
-                        await _objectStorageService.UploadTextAsync(
+                        await objectStorageService.UploadDirectoryAsync(localPath, backupPrefix, cancellationToken);
+                        await objectStorageService.UploadTextAsync(
                             $"{backupPrefix}/{BackupMarkerName}",
                             $"{repository.CloneUrl}\n{timestamp:O}",
                             cancellationToken);

@@ -45,7 +45,8 @@ class Program
         var workingRoot = ResolveWorkingRoot();
         Directory.CreateDirectory(workingRoot);
 
-        var objectStorageService = new SimpleS3ObjectStorageService(settings.Storage);
+        Func<CLI.Configuration.Models.StorageConfig, IObjectStorageService> objectStorageFactory =
+            storage => new SimpleS3ObjectStorageService(storage);
         var gitRepositoryService = new GitCliRepositoryService();
         var providerFactory = new BackupProviderClientFactory(
         [
@@ -54,9 +55,9 @@ class Program
             new ForgejoBackupProviderClient()
         ]);
 
-        var mirrorService = new MirrorService(gitRepositoryService, objectStorageService, workingRoot);
-        var backupService = new BackupService(providerFactory, gitRepositoryService, objectStorageService, workingRoot);
-        var retentionService = new RetentionService(objectStorageService);
+        var mirrorService = new MirrorService(gitRepositoryService, objectStorageFactory, workingRoot);
+        var backupService = new BackupService(providerFactory, gitRepositoryService, objectStorageFactory, workingRoot);
+        var retentionService = new RetentionService(objectStorageFactory);
         var scheduledJobRunner = new ScheduledJobRunner(() => liveSettings.Current, mirrorService, backupService, retentionService);
 
         using var shutdown = new CancellationTokenSource();

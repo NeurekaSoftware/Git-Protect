@@ -81,11 +81,23 @@ public sealed class ScheduledJobRunner
             }
 
             Console.WriteLine($"{jobName}: next run at {nextOccurrence.Value:O}.");
-            await DelayUntilUtcAsync(nextOccurrence.Value, cancellationToken);
+            var waitResult = await DelayUntilUtcAsync(
+                nextOccurrence.Value,
+                cronExpression,
+                getCronExpression,
+                cancellationToken);
 
-            if (cancellationToken.IsCancellationRequested)
+            if (waitResult == DelayUntilUtcResult.Cancelled)
             {
                 return;
+            }
+
+            if (waitResult == DelayUntilUtcResult.RescheduleRequested)
+            {
+                var updatedCronExpression = getCronExpression();
+                Console.WriteLine(
+                    $"{jobName}: schedule changed from '{cronExpression}' to '{updatedCronExpression}'. Recomputing next run.");
+                continue;
             }
 
             Console.WriteLine($"{jobName}: run started at {DateTimeOffset.UtcNow:O}.");
@@ -111,22 +123,41 @@ public sealed class ScheduledJobRunner
         }
     }
 
-    private static async Task DelayUntilUtcAsync(DateTimeOffset target, CancellationToken cancellationToken)
+    private static async Task<DelayUntilUtcResult> DelayUntilUtcAsync(
+        DateTimeOffset target,
+        string? scheduledCronExpression,
+        Func<string?> getCronExpression,
+        CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
+            var currentCronExpression = getCronExpression();
+            if (!string.Equals(currentCronExpression, scheduledCronExpression, StringComparison.Ordinal))
+            {
+                return DelayUntilUtcResult.RescheduleRequested;
+            }
+
             var remaining = target - DateTimeOffset.UtcNow;
             if (remaining <= TimeSpan.Zero)
             {
-                return;
+                return DelayUntilUtcResult.TargetReached;
             }
 
             var delay = remaining > TimeSpan.FromSeconds(1)
                 ? TimeSpan.FromSeconds(1)
                 : remaining;
 
-            await Task.Delay(delay, cancellationToken);
+            try
+            {
+                await Task.Delay(delay, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return DelayUntilUtcResult.Cancelled;
+            }
         }
+
+        return DelayUntilUtcResult.Cancelled;
     }
 
     private async Task RunRetentionAsync(string triggeredBy, CancellationToken cancellationToken)
@@ -151,5 +182,12 @@ public sealed class ScheduledJobRunner
         {
             _retentionLock.Release();
         }
+    }
+
+    private enum DelayUntilUtcResult
+    {
+        TargetReached,
+        RescheduleRequested,
+        Cancelled
     }
 }

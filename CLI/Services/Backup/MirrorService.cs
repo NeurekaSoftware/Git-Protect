@@ -1,4 +1,5 @@
 using CLI.Configuration;
+using CLI.Configuration.Models;
 using CLI.Services.Git;
 using CLI.Services.Paths;
 using CLI.Services.Storage;
@@ -10,18 +11,22 @@ public sealed class MirrorService
     private const string MirrorMarkerName = ".mirror-root";
 
     private readonly IGitRepositoryService _gitRepositoryService;
-    private readonly IObjectStorageService _objectStorageService;
+    private readonly Func<StorageConfig, IObjectStorageService> _objectStorageServiceFactory;
     private readonly string _workingRoot;
 
-    public MirrorService(IGitRepositoryService gitRepositoryService, IObjectStorageService objectStorageService, string workingRoot)
+    public MirrorService(
+        IGitRepositoryService gitRepositoryService,
+        Func<StorageConfig, IObjectStorageService> objectStorageServiceFactory,
+        string workingRoot)
     {
         _gitRepositoryService = gitRepositoryService;
-        _objectStorageService = objectStorageService;
+        _objectStorageServiceFactory = objectStorageServiceFactory;
         _workingRoot = workingRoot;
     }
 
     public async Task RunAsync(Settings settings, CancellationToken cancellationToken)
     {
+        var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var activeMirrorPrefixes = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var mirror in settings.Mirrors.Where(mirror => mirror?.Enabled != false))
@@ -50,8 +55,8 @@ public sealed class MirrorService
                     mirror.Lfs == true,
                     cancellationToken);
 
-                await _objectStorageService.UploadDirectoryAsync(localPath, mirrorPrefix, cancellationToken);
-                await _objectStorageService.UploadTextAsync($"{mirrorPrefix}/{MirrorMarkerName}", mirror.Url, cancellationToken);
+                await objectStorageService.UploadDirectoryAsync(localPath, mirrorPrefix, cancellationToken);
+                await objectStorageService.UploadTextAsync($"{mirrorPrefix}/{MirrorMarkerName}", mirror.Url, cancellationToken);
 
                 Console.WriteLine($"Mirrored '{mirror.Url}' to '{mirrorPrefix}'.");
             }
@@ -63,13 +68,16 @@ public sealed class MirrorService
 
         if (settings.Storage.PruneOrphanedMirrors == true)
         {
-            await PruneOrphanedMirrorsAsync(activeMirrorPrefixes, cancellationToken);
+            await PruneOrphanedMirrorsAsync(objectStorageService, activeMirrorPrefixes, cancellationToken);
         }
     }
 
-    private async Task PruneOrphanedMirrorsAsync(HashSet<string> activeMirrorPrefixes, CancellationToken cancellationToken)
+    private async Task PruneOrphanedMirrorsAsync(
+        IObjectStorageService objectStorageService,
+        HashSet<string> activeMirrorPrefixes,
+        CancellationToken cancellationToken)
     {
-        var mirrorKeys = await _objectStorageService.ListObjectKeysAsync("mirrors/", cancellationToken);
+        var mirrorKeys = await objectStorageService.ListObjectKeysAsync("mirrors/", cancellationToken);
         var existingMirrorRoots = mirrorKeys
             .Where(key => key.EndsWith($"/{MirrorMarkerName}", StringComparison.Ordinal))
             .Select(key => key[..^($"/{MirrorMarkerName}".Length)])
@@ -83,7 +91,7 @@ public sealed class MirrorService
                 continue;
             }
 
-            await _objectStorageService.DeletePrefixAsync(mirrorRoot, cancellationToken);
+            await objectStorageService.DeletePrefixAsync(mirrorRoot, cancellationToken);
             Console.WriteLine($"Pruned orphaned mirror '{mirrorRoot}'.");
         }
     }

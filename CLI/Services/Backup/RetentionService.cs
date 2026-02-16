@@ -1,4 +1,5 @@
 using CLI.Configuration;
+using CLI.Configuration.Models;
 using CLI.Services.Storage;
 
 namespace CLI.Services.Backup;
@@ -7,11 +8,11 @@ public sealed class RetentionService
 {
     private const string BackupMarkerName = ".backup-root";
 
-    private readonly IObjectStorageService _objectStorageService;
+    private readonly Func<StorageConfig, IObjectStorageService> _objectStorageServiceFactory;
 
-    public RetentionService(IObjectStorageService objectStorageService)
+    public RetentionService(Func<StorageConfig, IObjectStorageService> objectStorageServiceFactory)
     {
-        _objectStorageService = objectStorageService;
+        _objectStorageServiceFactory = objectStorageServiceFactory;
     }
 
     public async Task RunAsync(Settings settings, CancellationToken cancellationToken)
@@ -23,8 +24,9 @@ public sealed class RetentionService
             return;
         }
 
+        var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays.Value);
-        var backupKeys = await _objectStorageService.ListObjectKeysAsync("backups/", cancellationToken);
+        var backupKeys = await objectStorageService.ListObjectKeysAsync("backups/", cancellationToken);
 
         var snapshots = backupKeys
             .Where(key => key.EndsWith($"/{BackupMarkerName}", StringComparison.Ordinal))
@@ -45,7 +47,7 @@ public sealed class RetentionService
 
             foreach (var snapshot in expired)
             {
-                await _objectStorageService.DeletePrefixAsync(snapshot.RootPrefix, cancellationToken);
+                await objectStorageService.DeletePrefixAsync(snapshot.RootPrefix, cancellationToken);
                 Console.WriteLine($"Deleted expired backup '{snapshot.RootPrefix}'.");
             }
         }
