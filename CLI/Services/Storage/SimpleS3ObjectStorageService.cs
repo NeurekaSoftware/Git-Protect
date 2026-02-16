@@ -3,7 +3,10 @@ using System.Text;
 using CLI.Configuration.Models;
 using CLI.Services.Paths;
 using Genbox.SimpleS3.Core.Abstracts.Clients;
+using Genbox.SimpleS3.Core.Abstracts.Enums;
+using Genbox.SimpleS3.Core.Common.Authentication;
 using Genbox.SimpleS3.Core.Extensions;
+using Genbox.SimpleS3.Extensions.GenericS3;
 using Genbox.SimpleS3.GenericS3;
 using Genbox.SimpleS3.ProviderBase;
 
@@ -18,18 +21,15 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
     {
         _bucket = storage.Bucket!;
 
-        var endpoint = storage.Endpoint!.TrimEnd('/');
-        if (storage.ForcePathStyle == true && !endpoint.Contains("{Bucket}", StringComparison.Ordinal))
+        var config = new GenericS3Config
         {
-            endpoint = $"{endpoint}/{{Bucket}}";
-        }
+            Credentials = new StringAccessKey(storage.AccessKeyId!, storage.SecretAccessKey!),
+            Endpoint = storage.Endpoint!.TrimEnd('/'),
+            RegionCode = storage.Region!,
+            NamingMode = storage.ForcePathStyle == true ? NamingMode.PathStyle : NamingMode.VirtualHost
+        };
 
-        var client = new GenericS3Client(
-            storage.AccessKeyId!,
-            storage.SecretAccessKey!,
-            endpoint,
-            storage.Region!,
-            new NetworkConfig());
+        var client = new GenericS3Client(config, new NetworkConfig());
 
         _objectClient = client;
     }
