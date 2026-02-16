@@ -103,12 +103,7 @@ class Program
 
     private static string ResolveWorkingRoot()
     {
-        if (IsRunningInContainer())
-        {
-            return Path.Combine(ContainerDataPath, ".git-protect-work");
-        }
-
-        return Path.Combine(Environment.CurrentDirectory, ".git-protect-work");
+        return Path.Combine(Path.GetTempPath(), ".git-protect");
     }
 
     private static string[] GetDefaultSettingsPathCandidates()
