@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using CLI.Configuration;
 using CLI.Configuration.Models;
+using CLI.Runtime;
 using CLI.Services.Git;
 using CLI.Services.Paths;
 using CLI.Services.Providers;
@@ -32,20 +33,30 @@ public sealed class BackupService
 
     public async Task RunAsync(Settings settings, CancellationToken cancellationToken)
     {
-        var objectStorageService = _objectStorageServiceFactory(settings.Storage);
+        var enabledBackups = settings.Backups.Where(backup => backup?.Enabled != false).ToArray();
+        AppLogger.Info($"backup: run started with {enabledBackups.Length} configured job(s).");
 
-        foreach (var backup in settings.Backups.Where(backup => backup?.Enabled != false))
+        var objectStorageService = _objectStorageServiceFactory(settings.Storage);
+        AppLogger.Debug(
+            $"backup: storage endpoint='{settings.Storage.Endpoint}', bucket='{settings.Storage.Bucket}', region='{settings.Storage.Region}'.");
+
+        foreach (var backup in enabledBackups)
         {
             if (backup is null || string.IsNullOrWhiteSpace(backup.Provider) || string.IsNullOrWhiteSpace(backup.Credential))
             {
+                AppLogger.Warn("backup: skipping job with missing provider or credential.");
                 continue;
             }
 
             try
             {
+                AppLogger.Info($"backup: provider '{backup.Provider}' job started.");
                 var providerClient = _providerFactory.Resolve(backup.Provider);
                 var credential = settings.Credentials[backup.Credential];
+                AppLogger.Info($"backup: listing repositories for provider '{backup.Provider}'.");
                 var discoveredRepositories = await providerClient.ListOwnedRepositoriesAsync(backup, credential, cancellationToken);
+                AppLogger.Info(
+                    $"backup: provider '{backup.Provider}' returned {discoveredRepositories.Count} repository(ies).");
                 var gitCredential = CredentialResolver.ResolveGitCredential(credential);
 
                 foreach (var repository in discoveredRepositories)
@@ -58,6 +69,8 @@ public sealed class BackupService
                         var timestamp = DateTimeOffset.UtcNow;
                         var backupPrefix = StorageKeyBuilder.BuildBackupPrefix(backup.Provider, pathInfo, timestamp);
                         var localPath = Path.Combine(_workingRoot, "backups", ComputeDeterministicFolderName($"{backup.Provider}:{repository.CloneUrl}"));
+                        AppLogger.Info($"backup: syncing '{repository.CloneUrl}'.");
+                        AppLogger.Debug($"backup: localPath='{localPath}', prefix='{backupPrefix}'.");
 
                         await _gitRepositoryService.SyncBareRepositoryAsync(
                             repository.CloneUrl,
@@ -67,25 +80,33 @@ public sealed class BackupService
                             includeLfs: backup.Lfs == true,
                             cancellationToken);
 
+                        AppLogger.Info($"backup: uploading git objects for '{repository.CloneUrl}'.");
                         await objectStorageService.UploadDirectoryAsync(localPath, backupPrefix, cancellationToken);
+                        AppLogger.Info($"backup: writing marker for '{repository.CloneUrl}'.");
                         await objectStorageService.UploadTextAsync(
                             $"{backupPrefix}/{BackupMarkerName}",
                             $"{repository.CloneUrl}\n{timestamp:O}",
                             cancellationToken);
 
-                        Console.WriteLine($"Backed up '{repository.CloneUrl}' to '{backupPrefix}'.");
+                        AppLogger.Info($"backup: completed '{repository.CloneUrl}' to '{backupPrefix}'.");
                     }
                     catch (Exception exception)
                     {
-                        Console.Error.WriteLine($"Backup failed for repository '{repository.CloneUrl}': {exception.Message}");
+                        AppLogger.Error(
+                            $"backup: repository '{repository.CloneUrl}' failed: {exception.Message}",
+                            exception);
                     }
                 }
+
+                AppLogger.Info($"backup: provider '{backup.Provider}' job completed.");
             }
             catch (Exception exception)
             {
-                Console.Error.WriteLine($"Backup provider '{backup.Provider}' failed: {exception.Message}");
+                AppLogger.Error($"backup: provider '{backup.Provider}' failed: {exception.Message}", exception);
             }
         }
+
+        AppLogger.Info("backup: run completed.");
     }
 
     private static string ComputeDeterministicFolderName(string value)

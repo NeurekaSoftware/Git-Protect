@@ -45,6 +45,9 @@ services:
 > These settings support hot reload so you don't have to restart your container after making changes.
 
 ```yaml
+logging:
+  logLevel: info
+
 storage:
   endpoint: https://accountid.r2.cloudflarestorage.com
   region: auto

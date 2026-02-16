@@ -5,6 +5,9 @@ namespace CLI.Configuration;
 
 public sealed class Settings
 {
+    [YamlMember(Alias = "logging")]
+    public LoggingConfig Logging { get; set; } = new();
+
     [YamlMember(Alias = "storage")]
     public StorageConfig Storage { get; set; } = new();
 

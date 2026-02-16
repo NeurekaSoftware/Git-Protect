@@ -16,34 +16,39 @@ class Program
     static async Task<int> Main(string[] args)
     {
         BuildMetadata.LoadFromEnvironment();
-        Console.WriteLine($"Version: {BuildMetadata.Version}");
-        Console.WriteLine($"Commit: {BuildMetadata.Commit}");
+        AppLogger.Info($"Version: {BuildMetadata.Version}");
+        AppLogger.Info($"Commit: {BuildMetadata.Commit}");
 
         var settingsPath = ResolveSettingsPath(args);
+        AppLogger.Info($"Using settings path '{settingsPath}'.");
+
         var settingsLoader = new SettingsLoader();
         var settingsLoadResult = settingsLoader.Load(settingsPath);
 
         if (!settingsLoadResult.IsSuccess)
         {
+            AppLogger.Error($"Failed to load settings from '{settingsPath}'.");
             foreach (var error in settingsLoadResult.Errors)
             {
-                Console.Error.WriteLine(error);
+                AppLogger.Error(error);
             }
 
             return 1;
         }
 
         var settings = settingsLoadResult.Settings!;
+        ApplyLogLevel(settings.Logging.LogLevel);
         using var liveSettings = new LiveSettings(settingsPath, settings, settingsLoader);
         liveSettings.Start();
 
-        Console.WriteLine($"Loaded settings from '{settingsPath}'.");
-        Console.WriteLine($"Watching settings file '{liveSettings.SettingsPath}' for changes.");
-        Console.WriteLine($"Configured backups: {settings.Backups.Count}");
-        Console.WriteLine($"Configured mirrors: {settings.Mirrors.Count}");
+        AppLogger.Info($"Loaded settings from '{settingsPath}'.");
+        AppLogger.Info($"Watching settings file '{liveSettings.SettingsPath}' for changes.");
+        AppLogger.Info($"Configured backups: {settings.Backups.Count}");
+        AppLogger.Info($"Configured mirrors: {settings.Mirrors.Count}");
 
         var workingRoot = ResolveWorkingRoot();
         Directory.CreateDirectory(workingRoot);
+        AppLogger.Info($"Working root: '{workingRoot}'.");
 
         Func<CLI.Configuration.Models.StorageConfig, IObjectStorageService> objectStorageFactory =
             storage => new SimpleS3ObjectStorageService(storage);
@@ -65,9 +70,10 @@ class Program
         {
             eventArgs.Cancel = true;
             shutdown.Cancel();
+            AppLogger.Warn("Shutdown requested by Ctrl+C.");
         };
 
-        Console.WriteLine("Scheduler started. Press Ctrl+C to stop.");
+        AppLogger.Info("Scheduler started. Press Ctrl+C to stop.");
 
         try
         {
@@ -78,8 +84,22 @@ class Program
             // Graceful shutdown.
         }
 
-        Console.WriteLine("Scheduler stopped.");
+        AppLogger.Info("Scheduler stopped.");
         return 0;
+    }
+
+    private static void ApplyLogLevel(string? configuredLogLevel)
+    {
+        if (!AppLogger.TryParseLogLevel(configuredLogLevel, out var parsedLevel))
+        {
+            AppLogger.SetMinimumLevel(AppLogLevel.Info);
+            AppLogger.Warn(
+                $"Invalid log level '{configuredLogLevel}'. Falling back to '{AppLogger.DefaultLogLevel}'.");
+            return;
+        }
+
+        AppLogger.SetMinimumLevel(parsedLevel);
+        AppLogger.Info($"Active log level: {AppLogger.ToConfigValue(parsedLevel)}.");
     }
 
     private static string ResolveSettingsPath(string[] args)

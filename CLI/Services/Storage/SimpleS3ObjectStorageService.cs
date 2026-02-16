@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using CLI.Configuration.Models;
+using CLI.Runtime;
 using CLI.Services.Paths;
 using Genbox.SimpleS3.Core.Abstracts.Clients;
 using Genbox.SimpleS3.Core.Abstracts.Enums;
@@ -32,6 +33,9 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         var client = new GenericS3Client(config, new NetworkConfig());
 
         _objectClient = client;
+        AppLogger.Info("storage: initialized S3 client.");
+        AppLogger.Debug(
+            $"storage: endpoint='{storage.Endpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}'.");
     }
 
     public async Task UploadDirectoryAsync(string localDirectory, string prefix, CancellationToken cancellationToken)
@@ -42,6 +46,8 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         }
 
         var normalizedPrefix = StorageKeyBuilder.EnsurePrefix(prefix);
+        AppLogger.Info($"storage: uploading directory '{localDirectory}' to prefix '{normalizedPrefix}'.");
+        var uploadedCount = 0;
 
         foreach (var file in Directory.EnumerateFiles(localDirectory, "*", SearchOption.AllDirectories))
         {
@@ -49,14 +55,19 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
 
             var relativePath = Path.GetRelativePath(localDirectory, file).Replace('\\', '/');
             var objectKey = $"{normalizedPrefix}{relativePath}";
+            AppLogger.Debug($"storage: uploading file '{file}' as object '{objectKey}'.");
 
             await using var stream = File.OpenRead(file);
             await _objectClient.PutObjectAsync(_bucket, objectKey, stream, _ => { }, cancellationToken);
+            uploadedCount++;
         }
+
+        AppLogger.Info($"storage: uploaded {uploadedCount} object(s) to prefix '{normalizedPrefix}'.");
     }
 
     public async Task UploadTextAsync(string objectKey, string content, CancellationToken cancellationToken)
     {
+        AppLogger.Info($"storage: uploading text object '{objectKey.Trim('/')}'.");
         var bytes = Encoding.UTF8.GetBytes(content);
         await using var stream = new MemoryStream(bytes, writable: false);
         await _objectClient.PutObjectAsync(_bucket, objectKey.Trim('/'), stream, _ => { }, cancellationToken);
@@ -65,6 +76,7 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
     public async Task<IReadOnlyList<string>> ListObjectKeysAsync(string prefix, CancellationToken cancellationToken)
     {
         var normalizedPrefix = StorageKeyBuilder.EnsurePrefix(prefix);
+        AppLogger.Info($"storage: listing object keys under prefix '{normalizedPrefix}'.");
         var keys = new List<string>();
 
         await foreach (var item in ObjectClientExtensions
@@ -78,11 +90,13 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             }
         }
 
+        AppLogger.Info($"storage: listed {keys.Count} object key(s) under prefix '{normalizedPrefix}'.");
         return keys;
     }
 
     public async Task DeletePrefixAsync(string prefix, CancellationToken cancellationToken)
     {
+        AppLogger.Info($"storage: deleting prefix '{prefix}'.");
         var objectKeys = await ListObjectKeysAsync(prefix, cancellationToken);
         await DeleteObjectsAsync(objectKeys, cancellationToken);
     }
@@ -97,11 +111,14 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
 
         if (keys.Length == 0)
         {
+            AppLogger.Info("storage: no objects to delete.");
             return;
         }
 
+        AppLogger.Info($"storage: deleting {keys.Length} object(s).");
         foreach (var batch in keys.Chunk(1000))
         {
+            AppLogger.Debug($"storage: deleting batch with {batch.Length} object(s).");
             await ObjectClientExtensions.DeleteObjectsAsync(_objectClient, _bucket, batch, _ => { }, cancellationToken);
         }
     }

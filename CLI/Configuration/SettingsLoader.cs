@@ -1,4 +1,5 @@
 using CLI.Configuration.Models;
+using CLI.Runtime;
 using CLI.Services.Scheduling;
 using YamlDotNet.Core;
 using YamlDotNet.Serialization;
@@ -62,6 +63,8 @@ public sealed class SettingsLoader
 
     private static void Normalize(Settings settings)
     {
+        settings.Logging ??= new LoggingConfig();
+        settings.Logging.LogLevel = NormalizeLogLevel(settings.Logging.LogLevel);
         settings.Storage ??= new StorageConfig();
         settings.Storage.ForcePathStyle ??= false;
         settings.Storage.PruneOrphanedMirrors ??= false;
@@ -101,11 +104,27 @@ public sealed class SettingsLoader
     private static List<string> Validate(Settings settings)
     {
         var errors = new List<string>();
+        ValidateLogging(settings, errors);
         ValidateStorage(settings, errors);
         ValidateBackups(settings, errors);
         ValidateMirrors(settings, errors);
         ValidateSchedule(settings, errors);
         return errors;
+    }
+
+    private static void ValidateLogging(Settings settings, List<string> errors)
+    {
+        if (settings.Logging is null)
+        {
+            errors.Add("logging is required.");
+            return;
+        }
+
+        if (!AppLogger.TryParseLogLevel(settings.Logging.LogLevel, out _))
+        {
+            var supported = string.Join(", ", AppLogger.SupportedLogLevels);
+            errors.Add($"logging.logLevel '{settings.Logging.LogLevel}' is invalid. Supported values: {supported}.");
+        }
     }
 
     private static void ValidateStorage(Settings settings, List<string> errors)
@@ -250,5 +269,13 @@ public sealed class SettingsLoader
 
         return uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
                uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLogLevel(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized)
+            ? AppLogger.DefaultLogLevel
+            : normalized;
     }
 }

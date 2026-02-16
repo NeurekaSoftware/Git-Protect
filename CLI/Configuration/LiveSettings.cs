@@ -1,3 +1,5 @@
+using CLI.Runtime;
+
 namespace CLI.Configuration;
 
 public sealed class LiveSettings : IDisposable
@@ -69,6 +71,8 @@ public sealed class LiveSettings : IDisposable
         _watcher.Created += OnSettingsFileChanged;
         _watcher.Deleted += OnSettingsFileChanged;
         _watcher.Renamed += OnSettingsFileRenamed;
+
+        AppLogger.Info($"Settings watcher started for '{_settingsPath}'.");
     }
 
     public void Dispose()
@@ -100,11 +104,13 @@ public sealed class LiveSettings : IDisposable
 
     private void OnSettingsFileChanged(object sender, FileSystemEventArgs args)
     {
+        AppLogger.Debug($"Detected settings file change event '{args.ChangeType}' at '{args.FullPath}'.");
         TriggerReload();
     }
 
     private void OnSettingsFileRenamed(object sender, RenamedEventArgs args)
     {
+        AppLogger.Debug($"Detected settings file rename from '{args.OldFullPath}' to '{args.FullPath}'.");
         TriggerReload();
     }
 
@@ -127,6 +133,7 @@ public sealed class LiveSettings : IDisposable
         }
 
         _ = Task.Run(() => ReloadAfterDebounceAsync(debounceTokenSource.Token));
+        AppLogger.Info("Settings reload scheduled.");
     }
 
     private async Task ReloadAfterDebounceAsync(CancellationToken cancellationToken)
@@ -134,11 +141,13 @@ public sealed class LiveSettings : IDisposable
         try
         {
             await Task.Delay(ReloadDebounce, cancellationToken);
+            AppLogger.Info("Reloading settings from disk.");
             Reload();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Ignore superseded reload tasks.
+            AppLogger.Debug("Superseded settings reload request was cancelled.");
         }
     }
 
@@ -147,21 +156,28 @@ public sealed class LiveSettings : IDisposable
         var result = _loader.Load(_settingsPath);
         if (!result.IsSuccess)
         {
-            Console.Error.WriteLine($"Settings reload failed for '{_settingsPath}'. Keeping previous settings.");
+            AppLogger.Error($"Settings reload failed for '{_settingsPath}'. Keeping previous settings.");
             foreach (var error in result.Errors)
             {
-                Console.Error.WriteLine($"settings reload error: {error}");
+                AppLogger.Error($"settings reload error: {error}");
             }
 
             return;
         }
 
-        lock (_sync)
+        var reloadedSettings = result.Settings!;
+        if (AppLogger.TryParseLogLevel(reloadedSettings.Logging.LogLevel, out var parsedLevel))
         {
-            _current = result.Settings!;
+            AppLogger.SetMinimumLevel(parsedLevel);
         }
 
-        Console.WriteLine($"Settings reloaded from '{_settingsPath}' at {DateTimeOffset.UtcNow:O}.");
+        lock (_sync)
+        {
+            _current = reloadedSettings;
+        }
+
+        AppLogger.Info($"Settings reloaded from '{_settingsPath}' at {DateTimeOffset.UtcNow:O}.");
+        AppLogger.Debug($"Current log level: '{reloadedSettings.Logging.LogLevel}'.");
     }
 
     private void ThrowIfDisposed()
