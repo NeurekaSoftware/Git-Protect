@@ -6,11 +6,11 @@ Simple scheduled backup and mirror tool for Git repositories, with S3-compatible
 
 | Backup capability | GitHub | GitLab | Forgejo |
 |---|---|---|---|
-| Repository (git) | ✅ | ✅ | ✅ |
+| Git repository | ✅ | ✅ | ✅ |
 | Git LFS objects | ✅ | ✅ | ✅ |
 | Issues | ❌ | ❌ | ❌ |
 | Issue comments | ❌ | ❌ | ❌ |
-| Pull requests / merge requests | ❌ | ❌ | ❌ |
+| Pull requests / Merge requests | ❌ | ❌ | ❌ |
 | PR/MR comments | ❌ | ❌ | ❌ |
 | Releases | ❌ | ❌ | ❌ |
 | Release artifacts | ❌ | ❌ | ❌ |
@@ -32,7 +32,7 @@ Simple scheduled backup and mirror tool for Git repositories, with S3-compatible
 ```yaml
 services:
   git-protect:
-    image: ghcr.io/NeurekaSoftware/Git-Protect:edge
+    image: ghcr.io/neurekasoftware/git-protect:edge
     container_name: git-protect
     volumes:
       - ./data:/app/data
