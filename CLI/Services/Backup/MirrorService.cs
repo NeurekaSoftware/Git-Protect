@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using CLI.Configuration;
 using CLI.Services.Git;
 using CLI.Services.Paths;
@@ -39,7 +37,7 @@ public sealed class MirrorService
                 var mirrorPrefix = StorageKeyBuilder.BuildMirrorPrefix(pathInfo);
                 activeMirrorPrefixes.Add(mirrorPrefix);
 
-                var localPath = Path.Combine(_workingRoot, "mirrors", ComputeDeterministicFolderName(mirrorPrefix));
+                var localPath = BuildLocalPathFromPrefix(mirrorPrefix);
                 var credential = string.IsNullOrWhiteSpace(mirror.Credential)
                     ? null
                     : CredentialResolver.ResolveGitCredential(settings.Credentials[mirror.Credential]);
@@ -90,9 +88,15 @@ public sealed class MirrorService
         }
     }
 
-    private static string ComputeDeterministicFolderName(string value)
+    private string BuildLocalPathFromPrefix(string mirrorPrefix)
     {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
+        var localPath = _workingRoot;
+
+        foreach (var segment in mirrorPrefix.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            localPath = Path.Combine(localPath, segment);
+        }
+
+        return localPath;
     }
 }
