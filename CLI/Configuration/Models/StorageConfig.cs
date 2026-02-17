@@ -31,6 +31,6 @@ public sealed class StorageConfig
     [YamlMember(Alias = "retention")]
     public int? Retention { get; set; }
 
-    [YamlMember(Alias = "pruneOrphanedMirrors")]
-    public bool? PruneOrphanedMirrors { get; set; }
+    [YamlMember(Alias = "retentionMinimum")]
+    public int? RetentionMinimum { get; set; }
 }

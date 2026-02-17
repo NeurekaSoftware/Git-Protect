@@ -76,7 +76,7 @@ public sealed class SettingsLoader
         settings.Storage.ForcePathStyle ??= false;
         settings.Storage.PayloadSignatureMode = NormalizePayloadSignatureMode(settings.Storage.PayloadSignatureMode);
         settings.Storage.AlwaysCalculateContentMd5 ??= false;
-        settings.Storage.PruneOrphanedMirrors ??= false;
+        settings.Storage.RetentionMinimum ??= 1;
         settings.Credentials ??= new Dictionary<string, CredentialConfig>(StringComparer.OrdinalIgnoreCase);
         settings.Credentials = new Dictionary<string, CredentialConfig>(settings.Credentials, StringComparer.OrdinalIgnoreCase);
         settings.Backups ??= [];
@@ -177,6 +177,11 @@ public sealed class SettingsLoader
         {
             errors.Add(
                 $"storage.payloadSignatureMode '{settings.Storage.PayloadSignatureMode}' is invalid. Supported values: full, streaming, unsigned.");
+        }
+
+        if (settings.Storage.RetentionMinimum is < 0)
+        {
+            errors.Add("storage.retentionMinimum must be 0 or greater.");
         }
     }
 

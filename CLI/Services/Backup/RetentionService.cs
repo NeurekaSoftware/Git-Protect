@@ -9,6 +9,7 @@ namespace CLI.Services.Backup;
 public sealed class RetentionService
 {
     private readonly Func<StorageConfig, IObjectStorageService> _objectStorageServiceFactory;
+    private bool _retentionMinimumZeroWarningShown;
 
     public RetentionService(Func<StorageConfig, IObjectStorageService> objectStorageServiceFactory)
     {
@@ -18,20 +19,46 @@ public sealed class RetentionService
     public async Task RunAsync(Settings settings, CancellationToken cancellationToken)
     {
         var retentionDays = settings.Storage.Retention;
+        var retentionMinimum = Math.Max(0, settings.Storage.RetentionMinimum ?? 1);
         if (retentionDays is null || retentionDays <= 0)
         {
             AppLogger.Info("Retention is disabled. Backups and mirrors will be kept indefinitely.");
             return;
         }
 
-        AppLogger.Info("Retention run started. retentionDays={RetentionDays}", retentionDays);
+        if (retentionMinimum == 0)
+        {
+            if (!_retentionMinimumZeroWarningShown)
+            {
+                AppLogger.Warn(
+                    "Retention minimum is set to 0. All backup and mirror snapshots can be deleted after the retention window, including repositories removed from configuration or whose URL changed.");
+                _retentionMinimumZeroWarningShown = true;
+            }
+        }
+        else
+        {
+            _retentionMinimumZeroWarningShown = false;
+        }
+
+        AppLogger.Info(
+            "Retention run started. retentionDays={RetentionDays}, retentionMinimum={RetentionMinimum}",
+            retentionDays,
+            retentionMinimum);
 
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays.Value);
         AppLogger.Info("Retention cutoff: {CutoffTimestamp}", AppLogger.FormatTimestamp(cutoff));
 
-        var backupRetention = await ApplyBackupRetentionAsync(objectStorageService, cutoff, cancellationToken);
-        var mirrorRetention = await ApplyMirrorRetentionAsync(objectStorageService, cutoff, cancellationToken);
+        var backupRetention = await ApplyBackupRetentionAsync(
+            objectStorageService,
+            cutoff,
+            retentionMinimum,
+            cancellationToken);
+        var mirrorRetention = await ApplyMirrorRetentionAsync(
+            objectStorageService,
+            cutoff,
+            retentionMinimum,
+            cancellationToken);
 
         AppLogger.Info(
             "Retention run completed. deletedSnapshots={DeletedSnapshots}, updatedIndexes={UpdatedIndexes}.",
@@ -42,6 +69,7 @@ public sealed class RetentionService
     private async Task<(int DeletedSnapshots, int UpdatedIndexes)> ApplyBackupRetentionAsync(
         IObjectStorageService objectStorageService,
         DateTimeOffset cutoff,
+        int retentionMinimum,
         CancellationToken cancellationToken)
     {
         var deletedCount = 0;
@@ -94,9 +122,9 @@ public sealed class RetentionService
                 continue;
             }
 
-            var newestSnapshotRootPrefix = normalizedSnapshots[0].RootPrefix;
+            var protectedSnapshotCount = Math.Min(retentionMinimum, normalizedSnapshots.Count);
             var expiredSnapshots = normalizedSnapshots
-                .Skip(1)
+                .Skip(protectedSnapshotCount)
                 .Where(snapshot => DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) < cutoff)
                 .ToArray();
 
@@ -108,8 +136,9 @@ public sealed class RetentionService
             }
 
             var retainedSnapshots = normalizedSnapshots
-                .Where(snapshot => string.Equals(snapshot.RootPrefix, newestSnapshotRootPrefix, StringComparison.Ordinal) ||
-                                   DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) >= cutoff)
+                .Where((snapshot, index) =>
+                    index < protectedSnapshotCount ||
+                    DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) >= cutoff)
                 .OrderByDescending(snapshot => snapshot.TimestampUnixSeconds)
                 .ToList();
 
@@ -143,6 +172,7 @@ public sealed class RetentionService
     private async Task<(int DeletedSnapshots, int UpdatedIndexes)> ApplyMirrorRetentionAsync(
         IObjectStorageService objectStorageService,
         DateTimeOffset cutoff,
+        int retentionMinimum,
         CancellationToken cancellationToken)
     {
         var deletedCount = 0;
@@ -195,9 +225,9 @@ public sealed class RetentionService
                 continue;
             }
 
-            var newestSnapshotRootPrefix = normalizedSnapshots[0].RootPrefix;
+            var protectedSnapshotCount = Math.Min(retentionMinimum, normalizedSnapshots.Count);
             var expiredSnapshots = normalizedSnapshots
-                .Skip(1)
+                .Skip(protectedSnapshotCount)
                 .Where(snapshot => DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) < cutoff)
                 .ToArray();
 
@@ -209,8 +239,9 @@ public sealed class RetentionService
             }
 
             var retainedSnapshots = normalizedSnapshots
-                .Where(snapshot => string.Equals(snapshot.RootPrefix, newestSnapshotRootPrefix, StringComparison.Ordinal) ||
-                                   DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) >= cutoff)
+                .Where((snapshot, index) =>
+                    index < protectedSnapshotCount ||
+                    DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) >= cutoff)
                 .OrderByDescending(snapshot => snapshot.TimestampUnixSeconds)
                 .ToList();
 
@@ -351,11 +382,6 @@ public sealed class RetentionService
             return new MirrorRegistryDocument();
         }
 
-        parsed.MirrorRoots = (parsed.MirrorRoots ?? [])
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value.Trim('/'))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
         parsed.IndexKeys = (parsed.IndexKeys ?? [])
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim('/'))

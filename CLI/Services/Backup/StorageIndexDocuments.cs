@@ -51,8 +51,6 @@ internal sealed class BackupSnapshotDocument
 
 internal sealed class MirrorRegistryDocument
 {
-    public List<string> MirrorRoots { get; set; } = [];
-
     public List<string> IndexKeys { get; set; } = [];
 }
 

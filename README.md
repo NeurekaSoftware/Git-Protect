@@ -59,7 +59,7 @@ storage:
   payloadSignatureMode: full
   alwaysCalculateContentMd5: false
   retention: 30
-  pruneOrphanedMirrors: false
+  retentionMinimum: 1
 
 credentials:
   github:

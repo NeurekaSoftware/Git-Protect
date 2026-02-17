@@ -34,22 +34,15 @@ public sealed class MirrorService
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var mirrorRegistryObjectKey = StorageKeyBuilder.BuildMirrorRegistryObjectKey();
 
-        var prunedMirrors = 0;
-        var prunedMirrorIndexes = 0;
-
         var mirrorRegistry = await LoadMirrorRegistryAsync(objectStorageService, mirrorRegistryObjectKey, cancellationToken);
-        var knownMirrorPrefixes = new HashSet<string>(mirrorRegistry.MirrorRoots, StringComparer.Ordinal);
         var knownMirrorIndexKeys = new HashSet<string>(mirrorRegistry.IndexKeys, StringComparer.Ordinal);
-        var activeMirrorPrefixes = new HashSet<string>(StringComparer.Ordinal);
-        var activeMirrorIndexKeys = new HashSet<string>(StringComparer.Ordinal);
         var mirrorRegistryChanged = false;
 
         AppLogger.Debug(
-            "Mirror storage target configured. endpoint={Endpoint}, bucket={Bucket}, region={Region}, pruneOrphanedMirrors={PruneOrphanedMirrors}.",
+            "Mirror storage target configured. endpoint={Endpoint}, bucket={Bucket}, region={Region}.",
             settings.Storage.Endpoint,
             settings.Storage.Bucket,
-            settings.Storage.Region,
-            settings.Storage.PruneOrphanedMirrors);
+            settings.Storage.Region);
 
         foreach (var mirror in enabledMirrors)
         {
@@ -65,17 +58,12 @@ public sealed class MirrorService
                 var mirrorPrefix = StorageKeyBuilder.BuildMirrorPrefix(pathInfo);
                 var mirrorRepositoryIdentity = StorageKeyBuilder.BuildMirrorRepositoryIdentity(pathInfo);
                 var mirrorIndexObjectKey = StorageKeyBuilder.BuildMirrorRepositoryIndexObjectKey(pathInfo);
-                activeMirrorPrefixes.Add(mirrorPrefix);
 
                 var localPath = BuildLocalPathFromPrefix(mirrorPrefix);
                 var credential = string.IsNullOrWhiteSpace(mirror.Credential)
                     ? null
                     : CredentialResolver.ResolveGitCredential(settings.Credentials[mirror.Credential]);
                 var mirrorIndexContent = await objectStorageService.GetTextIfExistsAsync(mirrorIndexObjectKey, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(mirrorIndexContent))
-                {
-                    activeMirrorIndexKeys.Add(mirrorIndexObjectKey);
-                }
 
                 var mirrorIndexDocument = ParseOrCreateMirrorRepositoryIndex(mirrorIndexContent, mirrorRepositoryIdentity);
                 AppLogger.Info("Mirror sync started. repository={RepositoryUrl}", mirror.Url);
@@ -119,7 +107,6 @@ public sealed class MirrorService
                         cancellationToken);
                 }
 
-                activeMirrorIndexKeys.Add(mirrorIndexObjectKey);
                 if (knownMirrorIndexKeys.Add(mirrorIndexObjectKey))
                 {
                     mirrorRegistryChanged = true;
@@ -145,64 +132,8 @@ public sealed class MirrorService
             }
         }
 
-        if (settings.Storage.PruneOrphanedMirrors == true)
-        {
-            AppLogger.Info("Pruning orphaned mirrors is enabled.");
-            foreach (var mirrorPrefix in knownMirrorPrefixes)
-            {
-                if (activeMirrorPrefixes.Contains(mirrorPrefix))
-                {
-                    continue;
-                }
-
-                AppLogger.Info("Pruning orphaned mirror prefix={MirrorPrefix}.", mirrorPrefix);
-                await objectStorageService.DeletePrefixAsync(mirrorPrefix, cancellationToken);
-                prunedMirrors++;
-            }
-
-            var staleMirrorIndexKeys = knownMirrorIndexKeys
-                .Where(indexKey => !activeMirrorIndexKeys.Contains(indexKey))
-                .ToArray();
-            if (staleMirrorIndexKeys.Length > 0)
-            {
-                AppLogger.Info(
-                    "Pruning orphaned mirror indexes. indexCount={MirrorIndexCount}.",
-                    staleMirrorIndexKeys.Length);
-                await objectStorageService.DeleteObjectsAsync(staleMirrorIndexKeys, cancellationToken);
-                prunedMirrorIndexes += staleMirrorIndexKeys.Length;
-            }
-
-            if (!knownMirrorPrefixes.SetEquals(activeMirrorPrefixes) ||
-                !knownMirrorIndexKeys.SetEquals(activeMirrorIndexKeys))
-            {
-                mirrorRegistryChanged = true;
-                knownMirrorPrefixes = new HashSet<string>(activeMirrorPrefixes, StringComparer.Ordinal);
-                knownMirrorIndexKeys = new HashSet<string>(activeMirrorIndexKeys, StringComparer.Ordinal);
-            }
-        }
-        else
-        {
-            AppLogger.Debug("Pruning orphaned mirrors is disabled.");
-            foreach (var activeMirrorPrefix in activeMirrorPrefixes)
-            {
-                if (knownMirrorPrefixes.Add(activeMirrorPrefix))
-                {
-                    mirrorRegistryChanged = true;
-                }
-            }
-
-            foreach (var activeMirrorIndexKey in activeMirrorIndexKeys)
-            {
-                if (knownMirrorIndexKeys.Add(activeMirrorIndexKey))
-                {
-                    mirrorRegistryChanged = true;
-                }
-            }
-        }
-
         if (mirrorRegistryChanged)
         {
-            mirrorRegistry.MirrorRoots = knownMirrorPrefixes.OrderBy(value => value, StringComparer.Ordinal).ToList();
             mirrorRegistry.IndexKeys = knownMirrorIndexKeys.OrderBy(value => value, StringComparer.Ordinal).ToList();
             await objectStorageService.UploadTextAsync(
                 mirrorRegistryObjectKey,
@@ -211,9 +142,8 @@ public sealed class MirrorService
         }
 
         AppLogger.Info(
-            "Mirror run completed. prunedMirrors={PrunedMirrors}, prunedMirrorIndexes={PrunedMirrorIndexes}.",
-            prunedMirrors,
-            prunedMirrorIndexes);
+            "Mirror run completed. trackedMirrorIndexes={MirrorIndexCount}.",
+            knownMirrorIndexKeys.Count);
     }
 
     private static MirrorRegistryDocument ParseOrCreateMirrorRegistry(string? json)
@@ -229,11 +159,6 @@ public sealed class MirrorService
             return new MirrorRegistryDocument();
         }
 
-        parsed.MirrorRoots = (parsed.MirrorRoots ?? [])
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => value.Trim('/'))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
         parsed.IndexKeys = (parsed.IndexKeys ?? [])
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value.Trim('/'))
