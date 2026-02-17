@@ -19,6 +19,12 @@ public sealed class StorageConfig
     [YamlMember(Alias = "forcePathStyle")]
     public bool? ForcePathStyle { get; set; }
 
+    [YamlMember(Alias = "payloadSignatureMode")]
+    public string? PayloadSignatureMode { get; set; }
+
+    [YamlMember(Alias = "alwaysCalculateContentMd5")]
+    public bool? AlwaysCalculateContentMd5 { get; set; }
+
     [YamlMember(Alias = "archiveMode")]
     public bool? ArchiveMode { get; set; }
 

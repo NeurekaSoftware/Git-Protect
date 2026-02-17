@@ -52,12 +52,14 @@ storage:
   endpoint: https://accountid.r2.cloudflarestorage.com
   region: auto
   bucket: git-protect
-  forcePathStyle: false
-  archiveMode: true
   accessKeyId: accessKeyId
   secretAccessKey: secretAccessKey
+  forcePathStyle: false
+  payloadSignatureMode: full
+  alwaysCalculateContentMd5: false
   retention: 30
   pruneOrphanedMirrors: false
+  archiveMode: true
 
 credentials:
   github:

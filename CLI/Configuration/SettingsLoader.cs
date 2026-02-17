@@ -16,6 +16,13 @@ public sealed class SettingsLoader
         "forgejo"
     };
 
+    private static readonly HashSet<string> SupportedPayloadSignatureModes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "full",
+        "streaming",
+        "unsigned"
+    };
+
     private readonly IDeserializer _deserializer;
 
     public SettingsLoader()
@@ -67,6 +74,8 @@ public sealed class SettingsLoader
         settings.Logging.LogLevel = NormalizeLogLevel(settings.Logging.LogLevel);
         settings.Storage ??= new StorageConfig();
         settings.Storage.ForcePathStyle ??= false;
+        settings.Storage.PayloadSignatureMode = NormalizePayloadSignatureMode(settings.Storage.PayloadSignatureMode);
+        settings.Storage.AlwaysCalculateContentMd5 ??= false;
         settings.Storage.ArchiveMode ??= true;
         settings.Storage.PruneOrphanedMirrors ??= false;
         settings.Credentials ??= new Dictionary<string, CredentialConfig>(StringComparer.OrdinalIgnoreCase);
@@ -163,6 +172,12 @@ public sealed class SettingsLoader
         if (string.IsNullOrWhiteSpace(settings.Storage.Bucket))
         {
             errors.Add("storage.bucket is required.");
+        }
+
+        if (!SupportedPayloadSignatureModes.Contains(settings.Storage.PayloadSignatureMode!))
+        {
+            errors.Add(
+                $"storage.payloadSignatureMode '{settings.Storage.PayloadSignatureMode}' is invalid. Supported values: full, streaming, unsigned.");
         }
     }
 
@@ -277,6 +292,14 @@ public sealed class SettingsLoader
         var normalized = value?.Trim().ToLowerInvariant();
         return string.IsNullOrWhiteSpace(normalized)
             ? AppLogger.DefaultLogLevel
+            : normalized;
+    }
+
+    private static string NormalizePayloadSignatureMode(string? value)
+    {
+        var normalized = value?.Trim().ToLowerInvariant();
+        return string.IsNullOrWhiteSpace(normalized)
+            ? "full"
             : normalized;
     }
 }

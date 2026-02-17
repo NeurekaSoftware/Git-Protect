@@ -25,6 +25,8 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
     {
         _bucket = storage.Bucket!;
         var requestedPathStyle = storage.ForcePathStyle == true;
+        var payloadSignatureMode = ResolvePayloadSignatureMode(storage.PayloadSignatureMode);
+        var alwaysCalculateContentMd5 = storage.AlwaysCalculateContentMd5 == true;
         var resolvedEndpoint = ResolveEndpoint(storage.Endpoint!, _bucket, requestedPathStyle);
 
         var config = new GenericS3Config
@@ -33,6 +35,8 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             Endpoint = resolvedEndpoint,
             RegionCode = storage.Region!,
             NamingMode = requestedPathStyle ? NamingMode.PathStyle : NamingMode.VirtualHost,
+            PayloadSignatureMode = payloadSignatureMode,
+            AlwaysCalculateContentMd5 = alwaysCalculateContentMd5,
             ThrowExceptionOnError = true
         };
 
@@ -41,7 +45,7 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         _objectClient = client;
         AppLogger.Info("storage: initialized S3 client.");
         AppLogger.Debug(
-            $"storage: endpoint='{storage.Endpoint}', resolvedEndpoint='{resolvedEndpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}'.");
+            $"storage: endpoint='{storage.Endpoint}', resolvedEndpoint='{resolvedEndpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}', payloadSignatureMode='{payloadSignatureMode}', alwaysCalculateContentMd5='{alwaysCalculateContentMd5}'.");
     }
 
     public async Task UploadDirectoryAsync(string localDirectory, string prefix, CancellationToken cancellationToken)
@@ -221,6 +225,16 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         var authority = uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
         var path = uri.AbsolutePath == "/" ? string.Empty : uri.AbsolutePath.TrimEnd('/');
         return $"{uri.Scheme}://{{Bucket}}.{authority}{path}";
+    }
+
+    private static SignatureMode ResolvePayloadSignatureMode(string? configuredMode)
+    {
+        return configuredMode?.Trim().ToLowerInvariant() switch
+        {
+            "streaming" => SignatureMode.StreamingSignature,
+            "unsigned" => SignatureMode.Unsigned,
+            _ => SignatureMode.FullSignature
+        };
     }
 
     private static void EnsureSuccess(IResponse response, string operation)
