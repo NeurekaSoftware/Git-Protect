@@ -1,15 +1,16 @@
+using System.Net.Http.Headers;
 using CLI.Configuration.Models;
 
 namespace CLI.Services.Providers;
 
-public sealed class GitLabBackupProviderClient : ProviderHttpClientBase, IBackupProviderClient
+public sealed class ForgejoRepositoryProviderClient : ProviderHttpClientBase, IRepositoryProviderClient
 {
-    private const string DefaultBaseUrl = "https://gitlab.com";
+    private const string DefaultBaseUrl = "https://codeberg.org";
 
-    public string Provider => "gitlab";
+    public string Provider => "forgejo";
 
     public async Task<IReadOnlyList<DiscoveredRepository>> ListOwnedRepositoriesAsync(
-        BackupJobConfig backup,
+        RepositoryJobConfig repository,
         CredentialConfig credential,
         CancellationToken cancellationToken)
     {
@@ -18,17 +19,16 @@ public sealed class GitLabBackupProviderClient : ProviderHttpClientBase, IBackup
             return [];
         }
 
-        var baseUrl = EnsureApiSuffix(ResolveBaseUrl(backup.BaseUrl, DefaultBaseUrl), "/api/v4");
+        var baseUrl = EnsureApiSuffix(ResolveBaseUrl(repository.BaseUrl, DefaultBaseUrl), "/api/v1");
         var repositories = new List<DiscoveredRepository>();
 
         using var client = CreateClient(token: string.Empty);
         client.DefaultRequestHeaders.Remove("Authorization");
-        client.DefaultRequestHeaders.Add("PRIVATE-TOKEN", credential.ApiKey.Trim());
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("token", credential.ApiKey.Trim());
 
-        var page = 1;
-        while (true)
+        for (var page = 1; ; page++)
         {
-            var requestUri = $"{baseUrl}/projects?owned=true&simple=true&per_page=100&page={page}";
+            var requestUri = $"{baseUrl}/user/repos?affiliation=owner&limit=50&page={page}";
             using var response = await client.GetAsync(requestUri, cancellationToken);
             response.EnsureSuccessStatusCode();
 
@@ -38,9 +38,10 @@ public sealed class GitLabBackupProviderClient : ProviderHttpClientBase, IBackup
                 break;
             }
 
+            var count = 0;
             foreach (var item in document.RootElement.EnumerateArray())
             {
-                var cloneUrl = GetStringOrNull(item, "http_url_to_repo");
+                var cloneUrl = GetStringOrNull(item, "clone_url");
                 if (string.IsNullOrWhiteSpace(cloneUrl))
                 {
                     continue;
@@ -49,22 +50,16 @@ public sealed class GitLabBackupProviderClient : ProviderHttpClientBase, IBackup
                 repositories.Add(new DiscoveredRepository
                 {
                     CloneUrl = cloneUrl,
-                    WebUrl = GetStringOrNull(item, "web_url")
+                    WebUrl = GetStringOrNull(item, "html_url")
                 });
+
+                count++;
             }
 
-            if (!response.Headers.TryGetValues("X-Next-Page", out var values))
+            if (count < 50)
             {
                 break;
             }
-
-            var nextPageRaw = values.FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(nextPageRaw) || !int.TryParse(nextPageRaw, out var nextPage) || nextPage <= page)
-            {
-                break;
-            }
-
-            page = nextPage;
         }
 
         return repositories;

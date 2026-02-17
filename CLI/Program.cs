@@ -1,8 +1,8 @@
 using CLI.Configuration;
 using CLI.Runtime;
-using CLI.Services.Backup;
 using CLI.Services.Git;
 using CLI.Services.Providers;
+using CLI.Services.Repositories;
 using CLI.Services.Scheduling;
 using CLI.Services.Storage;
 
@@ -45,9 +45,8 @@ class Program
             liveSettings.Start();
 
             AppLogger.Info(
-                "Configuration loaded. backups={BackupCount}, mirrors={MirrorCount}, watcher={SettingsPath}.",
-                settings.Backups.Count,
-                settings.Mirrors.Count,
+                "Configuration loaded. repositories={RepositoryCount}, watcher={SettingsPath}.",
+                settings.Repositories.Count,
                 liveSettings.SettingsPath);
 
             var workingRoot = ResolveWorkingRoot();
@@ -57,17 +56,16 @@ class Program
             Func<CLI.Configuration.Models.StorageConfig, IObjectStorageService> objectStorageFactory =
                 storage => new SimpleS3ObjectStorageService(storage);
             var gitRepositoryService = new GitCliRepositoryService();
-            var providerFactory = new BackupProviderClientFactory(
+            var providerFactory = new RepositoryProviderClientFactory(
             [
-                new GitHubBackupProviderClient(),
-                new GitLabBackupProviderClient(),
-                new ForgejoBackupProviderClient()
+                new GitHubRepositoryProviderClient(),
+                new GitLabRepositoryProviderClient(),
+                new ForgejoRepositoryProviderClient()
             ]);
 
-            var mirrorService = new MirrorService(gitRepositoryService, objectStorageFactory, workingRoot);
-            var backupService = new BackupService(providerFactory, gitRepositoryService, objectStorageFactory, workingRoot);
-            var retentionService = new RetentionService(objectStorageFactory);
-            var scheduledJobRunner = new ScheduledJobRunner(() => liveSettings.Current, mirrorService, backupService, retentionService);
+            var repositorySyncService = new RepositorySyncService(providerFactory, gitRepositoryService, objectStorageFactory, workingRoot);
+            var retentionService = new RepositoryRetentionService(objectStorageFactory);
+            var scheduledJobRunner = new ScheduledJobRunner(() => liveSettings.Current, repositorySyncService, retentionService);
 
             using var shutdown = new CancellationTokenSource();
             Console.CancelKeyPress += (_, eventArgs) =>

@@ -1,25 +1,25 @@
 # Git Protect
 
-Simple scheduled backup and mirror tool for Git repositories, with S3-compatible object storage support.
-Backups and mirrors are stored as `tar.gz` archives.
+Simple scheduled repository snapshot tool for Git repositories, with S3-compatible object storage support.
+Repository snapshots are stored as `tar.gz` archives.
 
 ## Features
 
-| Backup capability | GitHub | GitLab | Forgejo |
-|---|---|---|---|
-| Git repository | ✅ | ✅ | ✅ |
-| Git LFS objects | ✅ | ✅ | ✅ |
-| Issues | ❌ | ❌ | ❌ |
-| Issue comments | ❌ | ❌ | ❌ |
-| Pull requests / Merge requests | ❌ | ❌ | ❌ |
-| PR/MR comments | ❌ | ❌ | ❌ |
-| Releases | ❌ | ❌ | ❌ |
-| Release artifacts | ❌ | ❌ | ❌ |
+| Repository mode | Status | Notes |
+|---|---|---|
+| `provider` | ✅ | Discover owned repositories from GitHub, GitLab, or Forgejo API. |
+| `url` | ✅ | Track any repository URL directly without forge API discovery. |
 
-| Mirror capability | Status |
-|---|---|
-| Git repository | ✅ |
-| Git LFS objects | ✅ |
+| Repository capability | GitHub | GitLab | Forgejo | URL mode |
+|---|---|---|---|---|
+| Git repository | ✅ | ✅ | ✅ | ✅ |
+| Git LFS objects | ✅ | ✅ | ✅ | ✅ |
+| Issues | ❌ | ❌ | ❌ | ❌ |
+| Issue comments | ❌ | ❌ | ❌ | ❌ |
+| Pull requests / Merge requests | ❌ | ❌ | ❌ | ❌ |
+| PR/MR comments | ❌ | ❌ | ❌ | ❌ |
+| Releases | ❌ | ❌ | ❌ | ❌ |
+| Release artifacts | ❌ | ❌ | ❌ | ❌ |
 
 | Protocol support | Status |
 |---|---|
@@ -72,33 +72,39 @@ credentials:
     username: git
     apiKey: forgejoToken
 
-backups:
-  - provider: github
+repositories:
+  - mode: provider
+    provider: github
     credential: github
     lfs: false
     enabled: true
-  - provider: gitlab
+  - mode: provider
+    provider: gitlab
     credential: gitlab
     lfs: false
     enabled: true
-  - provider: forgejo
+  - mode: provider
+    provider: forgejo
     credential: forgejo
     baseUrl: https://codeberg.org
     lfs: false
     enabled: true
-
-mirrors:
-  - url: https://github.com/NeurekaSoftware/Git-Protect
+  - mode: url
+    url: https://github.com/NeurekaSoftware/Git-Protect
     credential: github
     lfs: true
     enabled: true
-  - url: https://gitlab.com/gitlab-org/gitlab
+  - mode: url
+    url: https://gitlab.com/gitlab-org/gitlab
     lfs: false
     enabled: true
 
 schedule:
-  backups:
-    cron: "0 0 * * 0"
-  mirrors:
+  repositories:
     cron: "0 */6 * * *"
 ```
+
+## Migration Note
+
+The old `backups` and `mirrors` config keys are no longer supported.
+Use `repositories` with `mode: provider` or `mode: url`.

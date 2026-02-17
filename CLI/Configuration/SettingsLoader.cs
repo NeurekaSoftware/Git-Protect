@@ -2,6 +2,7 @@ using CLI.Configuration.Models;
 using CLI.Runtime;
 using CLI.Services.Scheduling;
 using YamlDotNet.Core;
+using YamlDotNet.RepresentationModel;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -9,7 +10,7 @@ namespace CLI.Configuration;
 
 public sealed class SettingsLoader
 {
-    private static readonly HashSet<string> SupportedBackupProviders = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> SupportedRepositoryProviders = new(StringComparer.OrdinalIgnoreCase)
     {
         "github",
         "gitlab",
@@ -46,9 +47,11 @@ public sealed class SettingsLoader
         }
 
         Settings settings;
+        string yaml;
+
         try
         {
-            var yaml = File.ReadAllText(path);
+            yaml = File.ReadAllText(path);
             settings = _deserializer.Deserialize<Settings>(yaml) ?? new Settings();
         }
         catch (YamlException exception)
@@ -58,6 +61,12 @@ public sealed class SettingsLoader
         catch (Exception exception)
         {
             return SettingsLoadResult.Failure([$"failed to load settings '{path}': {exception.Message}"]);
+        }
+
+        var deprecatedKeyErrors = ValidateDeprecatedKeys(yaml);
+        if (deprecatedKeyErrors.Count > 0)
+        {
+            return SettingsLoadResult.Failure(deprecatedKeyErrors);
         }
 
         Normalize(settings);
@@ -79,33 +88,21 @@ public sealed class SettingsLoader
         settings.Storage.RetentionMinimum ??= 1;
         settings.Credentials ??= new Dictionary<string, CredentialConfig>(StringComparer.OrdinalIgnoreCase);
         settings.Credentials = new Dictionary<string, CredentialConfig>(settings.Credentials, StringComparer.OrdinalIgnoreCase);
-        settings.Backups ??= [];
-        settings.Mirrors ??= [];
+        settings.Repositories ??= [];
         settings.Schedule ??= new ScheduleConfig();
-        settings.Schedule.Backups ??= new JobScheduleConfig();
-        settings.Schedule.Mirrors ??= new JobScheduleConfig();
+        settings.Schedule.Repositories ??= new JobScheduleConfig();
 
-        foreach (var backup in settings.Backups)
+        foreach (var repository in settings.Repositories)
         {
-            if (backup is null)
+            if (repository is null)
             {
                 continue;
             }
 
-            backup.Enabled ??= true;
-            backup.Lfs ??= false;
-            backup.Provider = backup.Provider?.Trim().ToLowerInvariant();
-        }
-
-        foreach (var mirror in settings.Mirrors)
-        {
-            if (mirror is null)
-            {
-                continue;
-            }
-
-            mirror.Enabled ??= true;
-            mirror.Lfs ??= false;
+            repository.Enabled ??= true;
+            repository.Lfs ??= false;
+            repository.Mode = repository.Mode?.Trim().ToLowerInvariant();
+            repository.Provider = repository.Provider?.Trim().ToLowerInvariant();
         }
     }
 
@@ -114,8 +111,7 @@ public sealed class SettingsLoader
         var errors = new List<string>();
         ValidateLogging(settings, errors);
         ValidateStorage(settings, errors);
-        ValidateBackups(settings, errors);
-        ValidateMirrors(settings, errors);
+        ValidateRepositories(settings, errors);
         ValidateSchedule(settings, errors);
         return errors;
     }
@@ -184,125 +180,247 @@ public sealed class SettingsLoader
         }
     }
 
-    private static void ValidateBackups(Settings settings, List<string> errors)
+    private static void ValidateRepositories(Settings settings, List<string> errors)
     {
-        for (var i = 0; i < settings.Backups.Count; i++)
+        for (var i = 0; i < settings.Repositories.Count; i++)
         {
-            var backup = settings.Backups[i];
-            if (backup is null)
+            var repository = settings.Repositories[i];
+            if (repository is null)
             {
-                errors.Add($"backups[{i}] is required.");
+                errors.Add($"repositories[{i}] is required.");
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(backup.Provider))
+            if (string.IsNullOrWhiteSpace(repository.Mode))
             {
-                errors.Add($"backups[{i}].provider is required.");
-            }
-            else if (!SupportedBackupProviders.Contains(backup.Provider))
-            {
-                errors.Add($"backups[{i}].provider '{backup.Provider}' is not supported. Supported values: github, gitlab, forgejo.");
-            }
-
-            if (string.IsNullOrWhiteSpace(backup.Credential))
-            {
-                errors.Add($"backups[{i}].credential is required.");
+                errors.Add($"repositories[{i}].mode is required.");
                 continue;
             }
 
-            if (!settings.Credentials.ContainsKey(backup.Credential))
+            if (string.Equals(repository.Mode, RepositoryJobModes.Provider, StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add($"backups[{i}].credential references unknown credential '{backup.Credential}'.");
-            }
-
-            if (string.IsNullOrWhiteSpace(backup.BaseUrl))
-            {
+                ValidateProviderRepository(settings, repository, i, errors);
                 continue;
             }
 
-            if (!IsValidHttpUrl(backup.BaseUrl))
+            if (string.Equals(repository.Mode, RepositoryJobModes.Url, StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add($"backups[{i}].baseUrl must be an absolute http or https URL.");
+                ValidateUrlRepository(settings, repository, i, errors);
+                continue;
             }
+
+            errors.Add($"repositories[{i}].mode '{repository.Mode}' is not supported. Supported values: provider, url.");
         }
     }
 
-    private static void ValidateMirrors(Settings settings, List<string> errors)
+    private static void ValidateProviderRepository(
+        Settings settings,
+        RepositoryJobConfig repository,
+        int index,
+        List<string> errors)
     {
-        for (var i = 0; i < settings.Mirrors.Count; i++)
+        if (string.IsNullOrWhiteSpace(repository.Provider))
         {
-            var mirror = settings.Mirrors[i];
-            if (mirror is null)
-            {
-                errors.Add($"mirrors[{i}] is required.");
-                continue;
-            }
+            errors.Add($"repositories[{index}].provider is required when mode is provider.");
+        }
+        else if (!SupportedRepositoryProviders.Contains(repository.Provider))
+        {
+            errors.Add($"repositories[{index}].provider '{repository.Provider}' is not supported. Supported values: github, gitlab, forgejo.");
+        }
 
-            if (string.IsNullOrWhiteSpace(mirror.Url))
-            {
-                errors.Add($"mirrors[{i}].url is required.");
-            }
-            else if (!IsValidHttpUrl(mirror.Url))
-            {
-                errors.Add($"mirrors[{i}].url must be an absolute http or https URL.");
-            }
+        if (string.IsNullOrWhiteSpace(repository.Credential))
+        {
+            errors.Add($"repositories[{index}].credential is required when mode is provider.");
+        }
+        else if (!settings.Credentials.ContainsKey(repository.Credential))
+        {
+            errors.Add($"repositories[{index}].credential references unknown credential '{repository.Credential}'.");
+        }
 
-            if (string.IsNullOrWhiteSpace(mirror.Credential))
-            {
-                continue;
-            }
+        if (!string.IsNullOrWhiteSpace(repository.Url))
+        {
+            errors.Add($"repositories[{index}].url is not allowed when mode is provider.");
+        }
 
-            if (!settings.Credentials.ContainsKey(mirror.Credential))
-            {
-                errors.Add($"mirrors[{i}].credential references unknown credential '{mirror.Credential}'.");
-            }
+        if (!string.IsNullOrWhiteSpace(repository.BaseUrl) && !IsValidHttpUrl(repository.BaseUrl))
+        {
+            errors.Add($"repositories[{index}].baseUrl must be an absolute http or https URL.");
+        }
+    }
+
+    private static void ValidateUrlRepository(
+        Settings settings,
+        RepositoryJobConfig repository,
+        int index,
+        List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(repository.Url))
+        {
+            errors.Add($"repositories[{index}].url is required when mode is url.");
+        }
+        else if (!IsValidHttpUrl(repository.Url))
+        {
+            errors.Add($"repositories[{index}].url must be an absolute http or https URL.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(repository.Provider))
+        {
+            errors.Add($"repositories[{index}].provider is not allowed when mode is url.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(repository.BaseUrl))
+        {
+            errors.Add($"repositories[{index}].baseUrl is not allowed when mode is url.");
+        }
+
+        if (string.IsNullOrWhiteSpace(repository.Credential))
+        {
+            return;
+        }
+
+        if (!settings.Credentials.ContainsKey(repository.Credential))
+        {
+            errors.Add($"repositories[{index}].credential references unknown credential '{repository.Credential}'.");
         }
     }
 
     private static void ValidateSchedule(Settings settings, List<string> errors)
     {
-        ValidateCron(settings.Schedule.Backups.Cron, "schedule.backups.cron", errors);
-        ValidateCron(settings.Schedule.Mirrors.Cron, "schedule.mirrors.cron", errors);
-    }
-
-    private static void ValidateCron(string? cronExpression, string path, List<string> errors)
-    {
-        if (string.IsNullOrWhiteSpace(cronExpression))
+        if (settings.Schedule is null)
         {
-            errors.Add($"{path} is required.");
+            errors.Add("schedule is required.");
             return;
         }
 
-        if (!CronScheduleParser.TryParse(cronExpression, out _, out var error))
+        ValidateCron(settings.Schedule.Repositories.Cron, "schedule.repositories.cron", errors);
+    }
+
+    private static void ValidateCron(string? cronExpression, string fieldName, List<string> errors)
+    {
+        if (!CronScheduleParser.TryParse(cronExpression, out _, out var parseError))
         {
-            errors.Add($"{path} is invalid: {error}");
+            errors.Add($"{fieldName} is invalid: {parseError}");
         }
     }
 
-    private static bool IsValidHttpUrl(string url)
+    private static string NormalizeLogLevel(string? configuredValue)
     {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        return AppLogger.TryParseLogLevel(configuredValue, out var level)
+            ? AppLogger.ToConfigValue(level)
+            : AppLogger.DefaultLogLevel;
+    }
+
+    private static string NormalizePayloadSignatureMode(string? configuredValue)
+    {
+        return configuredValue?.Trim().ToLowerInvariant() switch
         {
-            return false;
+            "streaming" => "streaming",
+            "unsigned" => "unsigned",
+            _ => "full"
+        };
+    }
+
+    private static bool IsValidHttpUrl(string? value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+               && (uri.Scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+                   || uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static List<string> ValidateDeprecatedKeys(string yaml)
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(yaml))
+        {
+            return errors;
         }
 
-        return uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-               uri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+        YamlMappingNode? root;
+
+        try
+        {
+            using var reader = new StringReader(yaml);
+            var stream = new YamlStream();
+            stream.Load(reader);
+
+            root = stream.Documents.Count > 0
+                ? stream.Documents[0].RootNode as YamlMappingNode
+                : null;
+        }
+        catch
+        {
+            // Yaml parse errors are handled by the main deserialization path.
+            return errors;
+        }
+
+        if (root is null)
+        {
+            return errors;
+        }
+
+        if (ContainsKey(root, "backups"))
+        {
+            errors.Add("backups is no longer supported. Use repositories entries with mode: provider.");
+        }
+
+        if (ContainsKey(root, "mirrors"))
+        {
+            errors.Add("mirrors is no longer supported. Use repositories entries with mode: url.");
+        }
+
+        if (!TryGetMappingChild(root, "schedule", out var scheduleNode))
+        {
+            return errors;
+        }
+
+        if (ContainsKey(scheduleNode, "backups"))
+        {
+            errors.Add("schedule.backups is no longer supported. Use schedule.repositories.cron.");
+        }
+
+        if (ContainsKey(scheduleNode, "mirrors"))
+        {
+            errors.Add("schedule.mirrors is no longer supported. Use schedule.repositories.cron.");
+        }
+
+        return errors;
     }
 
-    private static string NormalizeLogLevel(string? value)
+    private static bool ContainsKey(YamlMappingNode mapping, string key)
     {
-        var normalized = value?.Trim().ToLowerInvariant();
-        return string.IsNullOrWhiteSpace(normalized)
-            ? AppLogger.DefaultLogLevel
-            : normalized;
+        foreach (var node in mapping.Children.Keys)
+        {
+            if (node is YamlScalarNode scalar &&
+                string.Equals(scalar.Value, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    private static string NormalizePayloadSignatureMode(string? value)
+    private static bool TryGetMappingChild(YamlMappingNode mapping, string key, out YamlMappingNode child)
     {
-        var normalized = value?.Trim().ToLowerInvariant();
-        return string.IsNullOrWhiteSpace(normalized)
-            ? "full"
-            : normalized;
+        foreach (var item in mapping.Children)
+        {
+            if (item.Key is not YamlScalarNode scalar ||
+                !string.Equals(scalar.Value, key, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (item.Value is YamlMappingNode typedChild)
+            {
+                child = typedChild;
+                return true;
+            }
+
+            break;
+        }
+
+        child = null!;
+        return false;
     }
 }

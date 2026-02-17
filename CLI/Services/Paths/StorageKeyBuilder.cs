@@ -4,10 +4,37 @@ public static class StorageKeyBuilder
 {
     private const string DefaultIndexPrefix = "indexes";
 
-    public static string BuildBackupRepositoryIdentity(string provider, RepositoryPathInfo repository)
+    public static string BuildProviderRepositoryPrefix(string provider, RepositoryPathInfo repository)
     {
         var segments = new List<string>
         {
+            "repositories",
+            "provider",
+            provider.Trim().ToLowerInvariant()
+        };
+
+        segments.AddRange(repository.Hierarchy);
+        return string.Join('/', segments);
+    }
+
+    public static string BuildUrlRepositoryPrefix(RepositoryPathInfo repository)
+    {
+        var segments = new List<string>
+        {
+            "repositories",
+            "url",
+            repository.FullDomain
+        };
+
+        segments.AddRange(repository.Hierarchy);
+        return string.Join('/', segments);
+    }
+
+    public static string BuildProviderRepositoryIdentity(string provider, RepositoryPathInfo repository)
+    {
+        var segments = new List<string>
+        {
+            "provider",
             provider.Trim().ToLowerInvariant(),
             repository.BaseDomain
         };
@@ -16,58 +43,38 @@ public static class StorageKeyBuilder
         return string.Join('/', segments);
     }
 
-    public static string BuildMirrorPrefix(RepositoryPathInfo repository)
-    {
-        var segments = new List<string> { "mirrors", repository.FullDomain };
-        segments.AddRange(repository.Hierarchy);
-        return string.Join('/', segments);
-    }
-
-    public static string BuildMirrorRepositoryIdentity(RepositoryPathInfo repository)
-    {
-        var segments = new List<string> { repository.FullDomain };
-        segments.AddRange(repository.Hierarchy);
-        return string.Join('/', segments);
-    }
-
-    public static string BuildBackupPrefix(string provider, RepositoryPathInfo repository)
+    public static string BuildUrlRepositoryIdentity(RepositoryPathInfo repository)
     {
         var segments = new List<string>
         {
-            "backups",
-            provider.Trim().ToLowerInvariant()
+            "url",
+            repository.FullDomain
         };
 
         segments.AddRange(repository.Hierarchy);
         return string.Join('/', segments);
     }
 
-    public static string BuildBackupIndexRegistryObjectKey()
+    public static string BuildRepositoryRegistryObjectKey()
     {
         var normalizedIndexPrefix = EnsurePrefix(DefaultIndexPrefix);
-        return $"{normalizedIndexPrefix}backups/registry.json".Trim('/');
+        return $"{normalizedIndexPrefix}repositories/registry.json".Trim('/');
     }
 
-    public static string BuildBackupRepositoryIndexObjectKey(
+    public static string BuildProviderRepositoryIndexObjectKey(
         string provider,
         RepositoryPathInfo repository)
     {
         var normalizedIndexPrefix = EnsurePrefix(DefaultIndexPrefix);
-        var repositoryIdentity = BuildBackupRepositoryIdentity(provider, repository);
-        return $"{normalizedIndexPrefix}backups/{repositoryIdentity}/index.json".Trim('/');
+        var repositoryIdentity = BuildProviderRepositoryIdentity(provider, repository);
+        return $"{normalizedIndexPrefix}repositories/{repositoryIdentity}/index.json".Trim('/');
     }
 
-    public static string BuildMirrorRegistryObjectKey()
+    public static string BuildUrlRepositoryIndexObjectKey(RepositoryPathInfo repository)
     {
         var normalizedIndexPrefix = EnsurePrefix(DefaultIndexPrefix);
-        return $"{normalizedIndexPrefix}mirrors/registry.json".Trim('/');
-    }
-
-    public static string BuildMirrorRepositoryIndexObjectKey(RepositoryPathInfo repository)
-    {
-        var normalizedIndexPrefix = EnsurePrefix(DefaultIndexPrefix);
-        var repositoryIdentity = BuildMirrorRepositoryIdentity(repository);
-        return $"{normalizedIndexPrefix}mirrors/{repositoryIdentity}/index.json".Trim('/');
+        var repositoryIdentity = BuildUrlRepositoryIdentity(repository);
+        return $"{normalizedIndexPrefix}repositories/{repositoryIdentity}/index.json".Trim('/');
     }
 
     public static string EnsurePrefix(string keyOrPrefix)

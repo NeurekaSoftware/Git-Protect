@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using CLI.Configuration.Models;
 
 namespace CLI.Services.Providers;
 
@@ -56,10 +55,5 @@ public abstract class ProviderHttpClientBase
         return value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
-    }
-
-    protected static bool IsEnabled(BackupJobConfig backup)
-    {
-        return backup.Enabled != false;
     }
 }

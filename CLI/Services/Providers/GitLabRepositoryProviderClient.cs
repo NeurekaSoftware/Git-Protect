@@ -1,16 +1,15 @@
-using System.Net.Http.Headers;
 using CLI.Configuration.Models;
 
 namespace CLI.Services.Providers;
 
-public sealed class ForgejoBackupProviderClient : ProviderHttpClientBase, IBackupProviderClient
+public sealed class GitLabRepositoryProviderClient : ProviderHttpClientBase, IRepositoryProviderClient
 {
-    private const string DefaultBaseUrl = "https://codeberg.org";
+    private const string DefaultBaseUrl = "https://gitlab.com";
 
-    public string Provider => "forgejo";
+    public string Provider => "gitlab";
 
     public async Task<IReadOnlyList<DiscoveredRepository>> ListOwnedRepositoriesAsync(
-        BackupJobConfig backup,
+        RepositoryJobConfig repository,
         CredentialConfig credential,
         CancellationToken cancellationToken)
     {
@@ -19,16 +18,17 @@ public sealed class ForgejoBackupProviderClient : ProviderHttpClientBase, IBacku
             return [];
         }
 
-        var baseUrl = EnsureApiSuffix(ResolveBaseUrl(backup.BaseUrl, DefaultBaseUrl), "/api/v1");
+        var baseUrl = EnsureApiSuffix(ResolveBaseUrl(repository.BaseUrl, DefaultBaseUrl), "/api/v4");
         var repositories = new List<DiscoveredRepository>();
 
         using var client = CreateClient(token: string.Empty);
         client.DefaultRequestHeaders.Remove("Authorization");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("token", credential.ApiKey.Trim());
+        client.DefaultRequestHeaders.Add("PRIVATE-TOKEN", credential.ApiKey.Trim());
 
-        for (var page = 1; ; page++)
+        var page = 1;
+        while (true)
         {
-            var requestUri = $"{baseUrl}/user/repos?affiliation=owner&limit=50&page={page}";
+            var requestUri = $"{baseUrl}/projects?owned=true&simple=true&per_page=100&page={page}";
             using var response = await client.GetAsync(requestUri, cancellationToken);
             response.EnsureSuccessStatusCode();
 
@@ -38,10 +38,9 @@ public sealed class ForgejoBackupProviderClient : ProviderHttpClientBase, IBacku
                 break;
             }
 
-            var count = 0;
             foreach (var item in document.RootElement.EnumerateArray())
             {
-                var cloneUrl = GetStringOrNull(item, "clone_url");
+                var cloneUrl = GetStringOrNull(item, "http_url_to_repo");
                 if (string.IsNullOrWhiteSpace(cloneUrl))
                 {
                     continue;
@@ -50,16 +49,22 @@ public sealed class ForgejoBackupProviderClient : ProviderHttpClientBase, IBacku
                 repositories.Add(new DiscoveredRepository
                 {
                     CloneUrl = cloneUrl,
-                    WebUrl = GetStringOrNull(item, "html_url")
+                    WebUrl = GetStringOrNull(item, "web_url")
                 });
-
-                count++;
             }
 
-            if (count < 50)
+            if (!response.Headers.TryGetValues("X-Next-Page", out var values))
             {
                 break;
             }
+
+            var nextPageRaw = values.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(nextPageRaw) || !int.TryParse(nextPageRaw, out var nextPage) || nextPage <= page)
+            {
+                break;
+            }
+
+            page = nextPage;
         }
 
         return repositories;

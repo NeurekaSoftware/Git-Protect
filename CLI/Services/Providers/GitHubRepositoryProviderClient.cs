@@ -2,14 +2,14 @@ using CLI.Configuration.Models;
 
 namespace CLI.Services.Providers;
 
-public sealed class GitHubBackupProviderClient : ProviderHttpClientBase, IBackupProviderClient
+public sealed class GitHubRepositoryProviderClient : ProviderHttpClientBase, IRepositoryProviderClient
 {
     private const string DefaultApiBaseUrl = "https://api.github.com";
 
     public string Provider => "github";
 
     public async Task<IReadOnlyList<DiscoveredRepository>> ListOwnedRepositoriesAsync(
-        BackupJobConfig backup,
+        RepositoryJobConfig repository,
         CredentialConfig credential,
         CancellationToken cancellationToken)
     {
@@ -18,7 +18,7 @@ public sealed class GitHubBackupProviderClient : ProviderHttpClientBase, IBackup
             return [];
         }
 
-        var baseUrl = ResolveGitHubApiBaseUrl(backup.BaseUrl);
+        var baseUrl = ResolveGitHubApiBaseUrl(repository.BaseUrl);
         var repositories = new List<DiscoveredRepository>();
 
         using var client = CreateClient(credential.ApiKey);

@@ -2,10 +2,16 @@ using YamlDotNet.Serialization;
 
 namespace CLI.Configuration.Models;
 
-public sealed class BackupJobConfig
+public sealed class RepositoryJobConfig
 {
+    [YamlMember(Alias = "mode")]
+    public string? Mode { get; set; }
+
     [YamlMember(Alias = "provider")]
     public string? Provider { get; set; }
+
+    [YamlMember(Alias = "url")]
+    public string? Url { get; set; }
 
     [YamlMember(Alias = "credential")]
     public string? Credential { get; set; }

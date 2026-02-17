@@ -2,12 +2,12 @@ using CLI.Configuration.Models;
 
 namespace CLI.Services.Providers;
 
-public interface IBackupProviderClient
+public interface IRepositoryProviderClient
 {
     string Provider { get; }
 
     Task<IReadOnlyList<DiscoveredRepository>> ListOwnedRepositoriesAsync(
-        BackupJobConfig backup,
+        RepositoryJobConfig repository,
         CredentialConfig credential,
         CancellationToken cancellationToken);
 }

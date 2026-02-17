@@ -1,15 +1,15 @@
 namespace CLI.Services.Providers;
 
-public sealed class BackupProviderClientFactory
+public sealed class RepositoryProviderClientFactory
 {
-    private readonly Dictionary<string, IBackupProviderClient> _clients;
+    private readonly Dictionary<string, IRepositoryProviderClient> _clients;
 
-    public BackupProviderClientFactory(IEnumerable<IBackupProviderClient> clients)
+    public RepositoryProviderClientFactory(IEnumerable<IRepositoryProviderClient> clients)
     {
         _clients = clients.ToDictionary(client => client.Provider, client => client, StringComparer.OrdinalIgnoreCase);
     }
 
-    public IBackupProviderClient Resolve(string provider)
+    public IRepositoryProviderClient Resolve(string provider)
     {
         if (_clients.TryGetValue(provider, out var client))
         {

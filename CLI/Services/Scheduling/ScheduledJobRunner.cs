@@ -1,46 +1,35 @@
 using CLI.Configuration;
 using CLI.Runtime;
-using CLI.Services.Backup;
+using CLI.Services.Repositories;
 
 namespace CLI.Services.Scheduling;
 
 public sealed class ScheduledJobRunner
 {
     private readonly Func<Settings> _getSettings;
-    private readonly MirrorService _mirrorService;
-    private readonly BackupService _backupService;
-    private readonly RetentionService _retentionService;
+    private readonly RepositorySyncService _repositorySyncService;
+    private readonly RepositoryRetentionService _retentionService;
     private readonly SemaphoreSlim _retentionLock = new(1, 1);
 
     public ScheduledJobRunner(
         Func<Settings> getSettings,
-        MirrorService mirrorService,
-        BackupService backupService,
-        RetentionService retentionService)
+        RepositorySyncService repositorySyncService,
+        RepositoryRetentionService retentionService)
     {
         _getSettings = getSettings;
-        _mirrorService = mirrorService;
-        _backupService = backupService;
+        _repositorySyncService = repositorySyncService;
         _retentionService = retentionService;
     }
 
     public async Task RunForeverAsync(CancellationToken cancellationToken)
     {
-        AppLogger.Info("Starting scheduled backup and mirror job loops.");
+        AppLogger.Info("Starting scheduled repository job loop.");
 
-        var backupLoop = RunScheduledLoopAsync(
-            jobName: "backups",
-            getCronExpression: () => _getSettings().Schedule.Backups.Cron,
-            runJob: token => _backupService.RunAsync(_getSettings(), token),
+        await RunScheduledLoopAsync(
+            jobName: "repositories",
+            getCronExpression: () => _getSettings().Schedule.Repositories.Cron,
+            runJob: token => _repositorySyncService.RunAsync(_getSettings(), token),
             cancellationToken);
-
-        var mirrorLoop = RunScheduledLoopAsync(
-            jobName: "mirrors",
-            getCronExpression: () => _getSettings().Schedule.Mirrors.Cron,
-            runJob: token => _mirrorService.RunAsync(_getSettings(), token),
-            cancellationToken);
-
-        await Task.WhenAll(backupLoop, mirrorLoop);
     }
 
     private async Task RunScheduledLoopAsync(

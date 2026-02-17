@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace CLI.Services.Backup;
+namespace CLI.Services.Repositories;
 
 internal static class StorageIndexDocuments
 {
@@ -30,38 +30,21 @@ internal static class StorageIndexDocuments
     }
 }
 
-internal sealed class BackupIndexRegistryDocument
+internal sealed class RepositoryRegistryDocument
 {
     public List<string> IndexKeys { get; set; } = [];
 }
 
-internal sealed class BackupRepositoryIndexDocument
+internal sealed class RepositoryIndexDocument
 {
+    public string Mode { get; set; } = string.Empty;
+
     public string RepositoryIdentity { get; set; } = string.Empty;
 
-    public List<BackupSnapshotDocument> Snapshots { get; set; } = [];
+    public List<RepositorySnapshotDocument> Snapshots { get; set; } = [];
 }
 
-internal sealed class BackupSnapshotDocument
-{
-    public string RootPrefix { get; set; } = string.Empty;
-
-    public long TimestampUnixSeconds { get; set; }
-}
-
-internal sealed class MirrorRegistryDocument
-{
-    public List<string> IndexKeys { get; set; } = [];
-}
-
-internal sealed class MirrorRepositoryIndexDocument
-{
-    public string RepositoryIdentity { get; set; } = string.Empty;
-
-    public List<MirrorSnapshotDocument> Snapshots { get; set; } = [];
-}
-
-internal sealed class MirrorSnapshotDocument
+internal sealed class RepositorySnapshotDocument
 {
     public string RootPrefix { get; set; } = string.Empty;
 
