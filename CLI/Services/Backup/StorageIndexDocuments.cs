@@ -52,4 +52,20 @@ internal sealed class BackupSnapshotDocument
 internal sealed class MirrorRegistryDocument
 {
     public List<string> MirrorRoots { get; set; } = [];
+
+    public List<string> IndexKeys { get; set; } = [];
+}
+
+internal sealed class MirrorRepositoryIndexDocument
+{
+    public string RepositoryIdentity { get; set; } = string.Empty;
+
+    public List<MirrorSnapshotDocument> Snapshots { get; set; } = [];
+}
+
+internal sealed class MirrorSnapshotDocument
+{
+    public string RootPrefix { get; set; } = string.Empty;
+
+    public long TimestampUnixSeconds { get; set; }
 }

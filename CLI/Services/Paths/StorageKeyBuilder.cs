@@ -23,6 +23,13 @@ public static class StorageKeyBuilder
         return string.Join('/', segments);
     }
 
+    public static string BuildMirrorRepositoryIdentity(RepositoryPathInfo repository)
+    {
+        var segments = new List<string> { repository.FullDomain };
+        segments.AddRange(repository.Hierarchy);
+        return string.Join('/', segments);
+    }
+
     public static string BuildBackupPrefix(string provider, RepositoryPathInfo repository)
     {
         var segments = new List<string>
@@ -54,6 +61,13 @@ public static class StorageKeyBuilder
     {
         var normalizedIndexPrefix = EnsurePrefix(DefaultIndexPrefix);
         return $"{normalizedIndexPrefix}mirrors/registry.json".Trim('/');
+    }
+
+    public static string BuildMirrorRepositoryIndexObjectKey(RepositoryPathInfo repository)
+    {
+        var normalizedIndexPrefix = EnsurePrefix(DefaultIndexPrefix);
+        var repositoryIdentity = BuildMirrorRepositoryIdentity(repository);
+        return $"{normalizedIndexPrefix}mirrors/{repositoryIdentity}/index.json".Trim('/');
     }
 
     public static string EnsurePrefix(string keyOrPrefix)
