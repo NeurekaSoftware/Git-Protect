@@ -72,7 +72,7 @@ public sealed class LiveSettings : IDisposable
         _watcher.Deleted += OnSettingsFileChanged;
         _watcher.Renamed += OnSettingsFileRenamed;
 
-        AppLogger.Info($"Settings watcher started for '{_settingsPath}'.");
+        AppLogger.Info("Settings file watcher started. settingsPath={SettingsPath}", _settingsPath);
     }
 
     public void Dispose()
@@ -104,13 +104,19 @@ public sealed class LiveSettings : IDisposable
 
     private void OnSettingsFileChanged(object sender, FileSystemEventArgs args)
     {
-        AppLogger.Debug($"Detected settings file change event '{args.ChangeType}' at '{args.FullPath}'.");
+        AppLogger.Debug(
+            "Settings file event detected. changeType={ChangeType}, path={Path}.",
+            args.ChangeType,
+            args.FullPath);
         TriggerReload();
     }
 
     private void OnSettingsFileRenamed(object sender, RenamedEventArgs args)
     {
-        AppLogger.Debug($"Detected settings file rename from '{args.OldFullPath}' to '{args.FullPath}'.");
+        AppLogger.Debug(
+            "Settings file rename detected. oldPath={OldPath}, newPath={NewPath}.",
+            args.OldFullPath,
+            args.FullPath);
         TriggerReload();
     }
 
@@ -133,7 +139,7 @@ public sealed class LiveSettings : IDisposable
         }
 
         _ = Task.Run(() => ReloadAfterDebounceAsync(debounceTokenSource.Token));
-        AppLogger.Info("Settings reload scheduled.");
+        AppLogger.Debug("Settings reload scheduled after debounce.");
     }
 
     private async Task ReloadAfterDebounceAsync(CancellationToken cancellationToken)
@@ -147,7 +153,7 @@ public sealed class LiveSettings : IDisposable
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Ignore superseded reload tasks.
-            AppLogger.Debug("Superseded settings reload request was cancelled.");
+            AppLogger.Debug("Superseded settings reload request was canceled.");
         }
     }
 
@@ -156,10 +162,10 @@ public sealed class LiveSettings : IDisposable
         var result = _loader.Load(_settingsPath);
         if (!result.IsSuccess)
         {
-            AppLogger.Error($"Settings reload failed for '{_settingsPath}'. Keeping previous settings.");
+            AppLogger.Error("Settings reload failed. settingsPath={SettingsPath}. Existing settings will be kept.", _settingsPath);
             foreach (var error in result.Errors)
             {
-                AppLogger.Error($"settings reload error: {error}");
+                AppLogger.Error("Settings reload validation error: {ValidationError}", error);
             }
 
             return;
@@ -176,8 +182,8 @@ public sealed class LiveSettings : IDisposable
             _current = reloadedSettings;
         }
 
-        AppLogger.Info($"Settings reloaded from '{_settingsPath}' at {DateTimeOffset.UtcNow:O}.");
-        AppLogger.Debug($"Current log level: '{reloadedSettings.Logging.LogLevel}'.");
+        AppLogger.Info("Settings reloaded successfully. settingsPath={SettingsPath}", _settingsPath);
+        AppLogger.Debug("Current log level from settings: {LogLevel}", reloadedSettings.Logging.LogLevel);
     }
 
     private void ThrowIfDisposed()

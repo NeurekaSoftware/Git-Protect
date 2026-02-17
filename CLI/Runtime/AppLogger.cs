@@ -1,3 +1,7 @@
+using System.Text;
+using Serilog;
+using Serilog.Events;
+
 namespace CLI.Runtime;
 
 public enum AppLogLevel
@@ -11,11 +15,22 @@ public enum AppLogLevel
 public static class AppLogger
 {
     private static readonly object Sync = new();
+    private static readonly TimeZoneInfo LocalTimeZone = TimeZoneInfo.Local;
     private static AppLogLevel _minimumLevel = AppLogLevel.Info;
 
     public const string DefaultLogLevel = "info";
 
     public static IReadOnlyList<string> SupportedLogLevels => ["debug", "info", "warn", "error"];
+
+    static AppLogger()
+    {
+        ReconfigureLogger(_minimumLevel);
+    }
+
+    public static void Initialize(AppLogLevel minimumLevel = AppLogLevel.Info)
+    {
+        SetMinimumLevel(minimumLevel);
+    }
 
     public static bool TryParseLogLevel(string? value, out AppLogLevel level)
     {
@@ -55,6 +70,7 @@ public static class AppLogger
         lock (Sync)
         {
             _minimumLevel = level;
+            ReconfigureLogger(_minimumLevel);
         }
     }
 
@@ -66,56 +82,97 @@ public static class AppLogger
         }
     }
 
-    public static void Debug(string message) => Write(AppLogLevel.Debug, message);
-
-    public static void Info(string message) => Write(AppLogLevel.Info, message);
-
-    public static void Warn(string message) => Write(AppLogLevel.Warn, message);
-
-    public static void Error(string message, Exception? exception = null)
+    public static string FormatTimestamp(DateTimeOffset value)
     {
-        Write(AppLogLevel.Error, message);
+        var localTime = TimeZoneInfo.ConvertTime(value, LocalTimeZone);
+        var timeZone = GetTimeZoneAbbreviation(localTime);
+        return $"{localTime:yyyy-MM-dd hh:mm:ss tt} ({timeZone})";
+    }
 
-        if (exception is not null && GetMinimumLevel() <= AppLogLevel.Debug)
+    public static void Debug(string messageTemplate, params object?[] propertyValues)
+    {
+        Log.Debug(messageTemplate, propertyValues);
+    }
+
+    public static void Info(string messageTemplate, params object?[] propertyValues)
+    {
+        Log.Information(messageTemplate, propertyValues);
+    }
+
+    public static void Warn(string messageTemplate, params object?[] propertyValues)
+    {
+        Log.Warning(messageTemplate, propertyValues);
+    }
+
+    public static void Error(string messageTemplate, params object?[] propertyValues)
+    {
+        Log.Error(messageTemplate, propertyValues);
+    }
+
+    public static void Error(Exception exception, string messageTemplate, params object?[] propertyValues)
+    {
+        Log.Error(exception, messageTemplate, propertyValues);
+    }
+
+    public static void Shutdown()
+    {
+        Log.CloseAndFlush();
+    }
+
+    private static void ReconfigureLogger(AppLogLevel minimumLevel)
+    {
+        var configuredLogger = new LoggerConfiguration()
+            .MinimumLevel.Is(ToSerilogLevel(minimumLevel))
+            .Enrich.WithProperty("TimeZone", GetTimeZoneAbbreviation(DateTimeOffset.Now))
+            .WriteTo.Console(
+                outputTemplate:
+                "[{Timestamp:yyyy-MM-dd hh:mm:ss tt} ({TimeZone})] [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
+        var previousLogger = Log.Logger;
+        Log.Logger = configuredLogger;
+
+        if (previousLogger is IDisposable disposableLogger)
         {
-            Write(AppLogLevel.Debug, exception.ToString());
+            disposableLogger.Dispose();
         }
     }
 
-    private static void Write(AppLogLevel level, string message)
+    private static string GetTimeZoneAbbreviation(DateTimeOffset value)
     {
-        if (!ShouldLog(level))
+        var localTime = TimeZoneInfo.ConvertTime(value, LocalTimeZone);
+        var displayName = LocalTimeZone.IsDaylightSavingTime(localTime.DateTime)
+            ? LocalTimeZone.DaylightName
+            : LocalTimeZone.StandardName;
+
+        if (displayName.Contains("Universal", StringComparison.OrdinalIgnoreCase) ||
+            displayName.Contains("UTC", StringComparison.OrdinalIgnoreCase))
         {
-            return;
+            return "UTC";
         }
 
-        var line = $"[{ToLevelLabel(level)}]: {message}";
-
-        if (level == AppLogLevel.Error)
+        var abbreviation = new StringBuilder();
+        foreach (var segment in displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
-            Console.Error.WriteLine(line);
-            return;
+            abbreviation.Append(char.ToUpperInvariant(segment[0]));
         }
 
-        Console.WriteLine(line);
+        if (abbreviation.Length is >= 2 and <= 6)
+        {
+            return abbreviation.ToString();
+        }
+
+        return LocalTimeZone.Id;
     }
 
-    private static bool ShouldLog(AppLogLevel level)
-    {
-        lock (Sync)
-        {
-            return level >= _minimumLevel;
-        }
-    }
-
-    private static string ToLevelLabel(AppLogLevel level)
+    private static LogEventLevel ToSerilogLevel(AppLogLevel level)
     {
         return level switch
         {
-            AppLogLevel.Debug => "DEBUG",
-            AppLogLevel.Info => "INFO",
-            AppLogLevel.Warn => "WARN",
-            _ => "ERROR"
+            AppLogLevel.Debug => LogEventLevel.Debug,
+            AppLogLevel.Info => LogEventLevel.Information,
+            AppLogLevel.Warn => LogEventLevel.Warning,
+            _ => LogEventLevel.Error
         };
     }
 }

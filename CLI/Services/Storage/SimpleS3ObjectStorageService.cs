@@ -50,9 +50,17 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         var client = new GenericS3Client(config, new NetworkConfig());
 
         _objectClient = client;
-        AppLogger.Info("storage: initialized S3 client.");
+        AppLogger.Info("Object storage client initialized. provider=GenericS3");
         AppLogger.Debug(
-            $"storage: endpoint='{storage.Endpoint}', resolvedEndpoint='{resolvedEndpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}', payloadSignatureMode='{payloadSignatureMode}', alwaysCalculateContentMd5='{alwaysCalculateContentMd5}', archiveHashMetadataKey='{ArchiveHashMetadataKey}'.");
+            "Object storage settings: endpoint={Endpoint}, resolvedEndpoint={ResolvedEndpoint}, region={Region}, bucket={Bucket}, forcePathStyle={ForcePathStyle}, payloadSignatureMode={PayloadSignatureMode}, alwaysCalculateContentMd5={AlwaysCalculateContentMd5}, archiveHashMetadataKey={ArchiveHashMetadataKey}.",
+            storage.Endpoint,
+            resolvedEndpoint,
+            storage.Region,
+            storage.Bucket,
+            storage.ForcePathStyle,
+            payloadSignatureMode,
+            alwaysCalculateContentMd5,
+            ArchiveHashMetadataKey);
     }
 
     public async Task<ArchiveUploadResult> UploadDirectoryAsTarGzAsync(
@@ -73,7 +81,11 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             throw new ArgumentException("Object key is required.", nameof(objectKey));
         }
 
-        AppLogger.Info($"storage: computing archive hash from '{localDirectory}' for object '{normalizedObjectKey}'.");
+        AppLogger.Debug(
+            "Preparing archive upload. localDirectory={LocalDirectory}, objectKey={ObjectKey}, useHeadHashCheck={UseHeadHashCheck}.",
+            localDirectory,
+            normalizedObjectKey,
+            useHeadHashCheck);
         string? temporaryArchivePath = null;
 
         try
@@ -85,7 +97,9 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
                 string.Equals(skipUploadIfSha256Matches, archiveSha256, StringComparison.OrdinalIgnoreCase))
             {
                 AppLogger.Info(
-                    $"storage: skipping archive upload for object '{normalizedObjectKey}' because local hash matches latest indexed snapshot.");
+                    "Archive upload skipped because local hash matches the latest indexed snapshot. objectKey={ObjectKey}, sha256={Sha256}.",
+                    normalizedObjectKey,
+                    archiveSha256);
                 return new ArchiveUploadResult
                 {
                     ObjectKey = normalizedObjectKey,
@@ -105,7 +119,9 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
                     string.Equals(remoteHash, archiveSha256, StringComparison.OrdinalIgnoreCase))
                 {
                     AppLogger.Info(
-                        $"storage: skipping archive upload for object '{normalizedObjectKey}' because hash metadata matches.");
+                        "Archive upload skipped because remote metadata hash matches local hash. objectKey={ObjectKey}, sha256={Sha256}.",
+                        normalizedObjectKey,
+                        archiveSha256);
                     return new ArchiveUploadResult
                     {
                         ObjectKey = normalizedObjectKey,
@@ -117,14 +133,16 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             }
 
             temporaryArchivePath = Path.Combine(Path.GetTempPath(), $"git-protect-{Guid.NewGuid():N}.tar.gz");
-            AppLogger.Info($"storage: creating archive from '{localDirectory}' for object '{normalizedObjectKey}'.");
+            AppLogger.Debug(
+                "Creating temporary archive before upload. localDirectory={LocalDirectory}, temporaryArchivePath={TemporaryArchivePath}.",
+                localDirectory,
+                temporaryArchivePath);
             await using (var archiveFileStream = File.Create(temporaryArchivePath))
             await using (var gzipStream = new GZipStream(archiveFileStream, CompressionLevel.SmallestSize))
             {
                 TarFile.CreateFromDirectory(localDirectory, gzipStream, includeBaseDirectory: false);
             }
 
-            AppLogger.Info($"storage: uploading archive '{temporaryArchivePath}' as object '{normalizedObjectKey}'.");
             await using var stream = File.OpenRead(temporaryArchivePath);
             var response = await _objectClient.PutObjectAsync(
                 _bucket,
@@ -133,6 +151,11 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
                 request => request.Metadata.Add(ArchiveHashMetadataKey, archiveSha256),
                 cancellationToken);
             EnsureSuccess(response, $"upload archive object '{normalizedObjectKey}'");
+            AppLogger.Info(
+                "Archive uploaded. objectKey={ObjectKey}, sha256={Sha256}, comparedWithHead={ComparedWithHead}.",
+                normalizedObjectKey,
+                archiveSha256,
+                useHeadHashCheck);
 
             return new ArchiveUploadResult
             {
@@ -153,11 +176,12 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
 
     public async Task UploadTextAsync(string objectKey, string content, CancellationToken cancellationToken)
     {
-        AppLogger.Info($"storage: uploading text object '{objectKey.Trim('/')}'.");
+        var normalizedObjectKey = objectKey.Trim('/');
+        AppLogger.Debug("Uploading text object. objectKey={ObjectKey}, bytes={ByteCount}.", normalizedObjectKey, Encoding.UTF8.GetByteCount(content));
         var bytes = Encoding.UTF8.GetBytes(content);
         await using var stream = new MemoryStream(bytes, writable: false);
-        var response = await _objectClient.PutObjectAsync(_bucket, objectKey.Trim('/'), stream, _ => { }, cancellationToken);
-        EnsureSuccess(response, $"upload text object '{objectKey.Trim('/')}'");
+        var response = await _objectClient.PutObjectAsync(_bucket, normalizedObjectKey, stream, _ => { }, cancellationToken);
+        EnsureSuccess(response, $"upload text object '{normalizedObjectKey}'");
     }
 
     public async Task<string?> GetTextIfExistsAsync(string objectKey, CancellationToken cancellationToken)
@@ -185,7 +209,7 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
     public async Task<IReadOnlyList<string>> ListObjectKeysAsync(string prefix, CancellationToken cancellationToken)
     {
         var normalizedPrefix = StorageKeyBuilder.EnsurePrefix(prefix);
-        AppLogger.Info($"storage: listing object keys under prefix '{normalizedPrefix}'.");
+        AppLogger.Debug("Listing object keys. prefix={Prefix}", normalizedPrefix);
         var keys = new List<string>();
 
         await foreach (var item in ObjectClientExtensions
@@ -199,13 +223,13 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             }
         }
 
-        AppLogger.Info($"storage: listed {keys.Count} object key(s) under prefix '{normalizedPrefix}'.");
+        AppLogger.Info("Object key listing completed. prefix={Prefix}, keyCount={KeyCount}.", normalizedPrefix, keys.Count);
         return keys;
     }
 
     public async Task DeletePrefixAsync(string prefix, CancellationToken cancellationToken)
     {
-        AppLogger.Info($"storage: deleting prefix '{prefix}'.");
+        AppLogger.Info("Deleting objects under prefix={Prefix}.", prefix);
         var objectKeys = await ListObjectKeysAsync(prefix, cancellationToken);
         await DeleteObjectsAsync(objectKeys, cancellationToken);
     }
@@ -220,14 +244,14 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
 
         if (keys.Length == 0)
         {
-            AppLogger.Info("storage: no objects to delete.");
+            AppLogger.Debug("No object deletions needed.");
             return;
         }
 
-        AppLogger.Info($"storage: deleting {keys.Length} object(s).");
+        AppLogger.Info("Deleting objects. count={ObjectCount}.", keys.Length);
         foreach (var batch in keys.Chunk(1000))
         {
-            AppLogger.Debug($"storage: deleting batch with {batch.Length} object(s).");
+            AppLogger.Debug("Deleting object batch. batchSize={BatchSize}.", batch.Length);
             await ObjectClientExtensions.DeleteObjectsAsync(_objectClient, _bucket, batch, _ => { }, cancellationToken);
         }
     }
@@ -440,7 +464,10 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         }
         catch (Exception exception)
         {
-            AppLogger.Warn($"storage: failed to remove temporary archive '{path}': {exception.Message}");
+            AppLogger.Warn(
+                "Failed to remove temporary archive. path={Path}, error={ErrorMessage}",
+                path,
+                exception.Message);
         }
     }
 }

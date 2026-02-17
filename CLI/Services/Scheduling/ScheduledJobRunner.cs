@@ -26,7 +26,7 @@ public sealed class ScheduledJobRunner
 
     public async Task RunForeverAsync(CancellationToken cancellationToken)
     {
-        AppLogger.Info("Starting scheduled job loops.");
+        AppLogger.Info("Starting scheduled backup and mirror job loops.");
 
         var backupLoop = RunScheduledLoopAsync(
             jobName: "backups",
@@ -55,12 +55,16 @@ public sealed class ScheduledJobRunner
         while (!cancellationToken.IsCancellationRequested)
         {
             var cronExpression = getCronExpression();
-            AppLogger.Debug($"{jobName}: evaluating cron expression '{cronExpression}'.");
+            AppLogger.Debug("{JobName}: evaluating cron expression '{CronExpression}'.", jobName, cronExpression);
             if (!CronScheduleParser.TryParse(cronExpression, out var schedule, out var parseError) || schedule is null)
             {
                 if (!string.Equals(lastInvalidCron, cronExpression, StringComparison.Ordinal))
                 {
-                    AppLogger.Warn($"{jobName}: invalid schedule '{cronExpression}': {parseError}. Waiting for config reload.");
+                    AppLogger.Warn(
+                        "{JobName}: schedule '{CronExpression}' is invalid ({ParseError}). Waiting for configuration reload.",
+                        jobName,
+                        cronExpression,
+                        parseError);
                     lastInvalidCron = cronExpression;
                 }
 
@@ -71,7 +75,7 @@ public sealed class ScheduledJobRunner
             lastInvalidCron = null;
             if (!string.Equals(lastAppliedCron, cronExpression, StringComparison.Ordinal))
             {
-                AppLogger.Info($"{jobName}: schedule set to {cronExpression}.");
+                AppLogger.Info("{JobName}: active schedule is '{CronExpression}'.", jobName, cronExpression);
                 lastAppliedCron = cronExpression;
             }
 
@@ -80,12 +84,21 @@ public sealed class ScheduledJobRunner
 
             if (nextOccurrence is null)
             {
-                AppLogger.Error($"{jobName}: schedule has no next occurrence. Stopping this job loop.");
+                AppLogger.Error(
+                    "{JobName}: schedule '{CronExpression}' has no next occurrence. Stopping this job loop.",
+                    jobName,
+                    cronExpression);
                 return;
             }
 
-            AppLogger.Info($"{jobName}: next run at {nextOccurrence.Value:O}.");
+            var secondsUntilNextRun = Math.Max(0L, (long)Math.Ceiling((nextOccurrence.Value - now).TotalSeconds));
+            AppLogger.Info(
+                "{JobName}: next run at {NextRunTimestamp} (in {SecondsUntilNextRun} seconds).",
+                jobName,
+                AppLogger.FormatTimestamp(nextOccurrence.Value),
+                secondsUntilNextRun);
             var waitResult = await DelayUntilUtcAsync(
+                jobName,
                 nextOccurrence.Value,
                 cronExpression,
                 getCronExpression,
@@ -100,16 +113,24 @@ public sealed class ScheduledJobRunner
             {
                 var updatedCronExpression = getCronExpression();
                 AppLogger.Info(
-                    $"{jobName}: schedule changed from '{cronExpression}' to '{updatedCronExpression}'. Recomputing next run.");
+                    "{JobName}: schedule changed from '{PreviousCronExpression}' to '{CurrentCronExpression}'. Recomputing next run.",
+                    jobName,
+                    cronExpression,
+                    updatedCronExpression);
                 continue;
             }
 
-            AppLogger.Info($"{jobName}: run started at {DateTimeOffset.UtcNow:O}.");
+            var runStartedAt = DateTimeOffset.UtcNow;
+            AppLogger.Info("{JobName}: run started.", jobName);
 
             try
             {
                 await runJob(cancellationToken);
-                AppLogger.Info($"{jobName}: run completed at {DateTimeOffset.UtcNow:O}.");
+                var runDurationSeconds = (DateTimeOffset.UtcNow - runStartedAt).TotalSeconds;
+                AppLogger.Info(
+                    "{JobName}: run completed in {DurationSeconds:0.###} seconds.",
+                    jobName,
+                    runDurationSeconds);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -117,7 +138,13 @@ public sealed class ScheduledJobRunner
             }
             catch (Exception exception)
             {
-                AppLogger.Error($"{jobName}: run failed: {exception.Message}", exception);
+                var runDurationSeconds = (DateTimeOffset.UtcNow - runStartedAt).TotalSeconds;
+                AppLogger.Error(
+                    exception,
+                    "{JobName}: run failed after {DurationSeconds:0.###} seconds. {ErrorMessage}",
+                    jobName,
+                    runDurationSeconds,
+                    exception.Message);
             }
 
             if (!cancellationToken.IsCancellationRequested)
@@ -128,6 +155,7 @@ public sealed class ScheduledJobRunner
     }
 
     private static async Task<DelayUntilUtcResult> DelayUntilUtcAsync(
+        string jobName,
         DateTimeOffset target,
         string? scheduledCronExpression,
         Func<string?> getCronExpression,
@@ -139,7 +167,10 @@ public sealed class ScheduledJobRunner
             if (!string.Equals(currentCronExpression, scheduledCronExpression, StringComparison.Ordinal))
             {
                 AppLogger.Debug(
-                    $"Detected cron change while waiting. old='{scheduledCronExpression}', new='{currentCronExpression}'.");
+                    "{JobName}: detected schedule change while waiting (old='{OldCronExpression}', new='{NewCronExpression}').",
+                    jobName,
+                    scheduledCronExpression,
+                    currentCronExpression);
                 return DelayUntilUtcResult.RescheduleRequested;
             }
 
@@ -172,18 +203,22 @@ public sealed class ScheduledJobRunner
 
         try
         {
-            AppLogger.Info($"retention: started after {triggeredBy} run.");
+            AppLogger.Info("Retention started after the {TriggeredByJob} job run.", triggeredBy);
             await _retentionService.RunAsync(_getSettings(), cancellationToken);
-            AppLogger.Info("retention: completed.");
+            AppLogger.Info("Retention completed.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Exit cleanly on shutdown.
-            AppLogger.Warn("retention: cancelled due to shutdown.");
+            AppLogger.Warn("Retention cancelled because shutdown was requested.");
         }
         catch (Exception exception)
         {
-            AppLogger.Error($"retention: failed after {triggeredBy} run: {exception.Message}", exception);
+            AppLogger.Error(
+                exception,
+                "Retention failed after the {TriggeredByJob} job run. {ErrorMessage}",
+                triggeredBy,
+                exception.Message);
         }
         finally
         {

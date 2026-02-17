@@ -20,11 +20,11 @@ public sealed class RetentionService
         var retentionDays = settings.Storage.Retention;
         if (retentionDays is null || retentionDays <= 0)
         {
-            AppLogger.Info("retention: disabled. Keeping backups forever.");
+            AppLogger.Info("Retention is disabled. Backups will be kept indefinitely.");
             return;
         }
 
-        AppLogger.Info($"retention: run started with retention='{retentionDays}' day(s).");
+        AppLogger.Info("Retention run started. retentionDays={RetentionDays}", retentionDays);
 
         var deletedCount = 0;
         var updatedIndexCount = 0;
@@ -38,7 +38,7 @@ public sealed class RetentionService
         var knownIndexKeys = new HashSet<string>(backupRegistry.IndexKeys, StringComparer.Ordinal);
         var backupRegistryChanged = false;
 
-        AppLogger.Info($"retention: processing backup indexes before cutoff '{cutoff:O}'.");
+        AppLogger.Info("Retention cutoff: {CutoffTimestamp}", AppLogger.FormatTimestamp(cutoff));
 
         foreach (var backupIndexObjectKey in knownIndexKeys.ToArray())
         {
@@ -47,14 +47,18 @@ public sealed class RetentionService
             {
                 backupRegistryChanged = true;
                 knownIndexKeys.Remove(backupIndexObjectKey);
-                AppLogger.Warn($"retention: index '{backupIndexObjectKey}' is missing. Removing it from registry.");
+                AppLogger.Warn(
+                    "Backup index is missing and will be removed from registry. indexObject={IndexObjectKey}",
+                    backupIndexObjectKey);
                 continue;
             }
 
             if (!StorageIndexDocuments.TryDeserialize<BackupRepositoryIndexDocument>(backupIndexContent, out var backupIndex) ||
                 backupIndex is null)
             {
-                AppLogger.Warn($"retention: index '{backupIndexObjectKey}' contains invalid JSON. Skipping.");
+                AppLogger.Warn(
+                    "Backup index contains invalid JSON and will be skipped. indexObject={IndexObjectKey}",
+                    backupIndexObjectKey);
                 continue;
             }
 
@@ -71,7 +75,9 @@ public sealed class RetentionService
             {
                 backupRegistryChanged = true;
                 knownIndexKeys.Remove(backupIndexObjectKey);
-                AppLogger.Warn($"retention: index '{backupIndexObjectKey}' has no valid snapshots. Removing it from registry.");
+                AppLogger.Warn(
+                    "Backup index has no valid snapshots and will be removed from registry. indexObject={IndexObjectKey}",
+                    backupIndexObjectKey);
                 continue;
             }
 
@@ -85,7 +91,7 @@ public sealed class RetentionService
             {
                 await objectStorageService.DeletePrefixAsync(snapshot.RootPrefix, cancellationToken);
                 deletedCount++;
-                AppLogger.Info($"retention: deleted expired backup '{snapshot.RootPrefix}'.");
+                AppLogger.Info("Deleted expired backup snapshot. prefix={SnapshotPrefix}", snapshot.RootPrefix);
             }
 
             var retainedSnapshots = normalizedSnapshots
@@ -115,7 +121,9 @@ public sealed class RetentionService
         }
 
         AppLogger.Info(
-            $"retention: run completed. deletedSnapshots={deletedCount}, updatedIndexes={updatedIndexCount}.");
+            "Retention run completed. deletedSnapshots={DeletedSnapshots}, updatedIndexes={UpdatedIndexes}.",
+            deletedCount,
+            updatedIndexCount);
     }
 
     private static bool IsValidSnapshot(BackupSnapshotDocument snapshot)
@@ -157,7 +165,7 @@ public sealed class RetentionService
 
         if (!StorageIndexDocuments.TryDeserialize<BackupIndexRegistryDocument>(json, out var parsed) || parsed is null)
         {
-            AppLogger.Warn("retention: backup index registry is invalid JSON. Rebuilding registry.");
+            AppLogger.Warn("Backup index registry is invalid JSON. Rebuilding from discovered state.");
             return new BackupIndexRegistryDocument();
         }
 

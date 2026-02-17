@@ -15,77 +15,86 @@ class Program
 
     static async Task<int> Main(string[] args)
     {
-        BuildMetadata.LoadFromEnvironment();
-        AppLogger.Info("Git Protect");
-        AppLogger.Info($"Version: {BuildMetadata.Version} ({BuildMetadata.Commit})");
-
-        var settingsPath = ResolveSettingsPath(args);
-        AppLogger.Info($"Using settings path '{settingsPath}'.");
-
-        var settingsLoader = new SettingsLoader();
-        var settingsLoadResult = settingsLoader.Load(settingsPath);
-
-        if (!settingsLoadResult.IsSuccess)
-        {
-            AppLogger.Error($"Failed to load settings from '{settingsPath}'.");
-            foreach (var error in settingsLoadResult.Errors)
-            {
-                AppLogger.Error(error);
-            }
-
-            return 1;
-        }
-
-        var settings = settingsLoadResult.Settings!;
-        ApplyLogLevel(settings.Logging.LogLevel);
-        using var liveSettings = new LiveSettings(settingsPath, settings, settingsLoader);
-        liveSettings.Start();
-
-        AppLogger.Info($"Loaded settings from '{settingsPath}'.");
-        AppLogger.Info($"Watching settings file '{liveSettings.SettingsPath}' for changes.");
-        AppLogger.Info($"Configured backups: {settings.Backups.Count}");
-        AppLogger.Info($"Configured mirrors: {settings.Mirrors.Count}");
-
-        var workingRoot = ResolveWorkingRoot();
-        Directory.CreateDirectory(workingRoot);
-        AppLogger.Info($"Working root: '{workingRoot}'.");
-
-        Func<CLI.Configuration.Models.StorageConfig, IObjectStorageService> objectStorageFactory =
-            storage => new SimpleS3ObjectStorageService(storage);
-        var gitRepositoryService = new GitCliRepositoryService();
-        var providerFactory = new BackupProviderClientFactory(
-        [
-            new GitHubBackupProviderClient(),
-            new GitLabBackupProviderClient(),
-            new ForgejoBackupProviderClient()
-        ]);
-
-        var mirrorService = new MirrorService(gitRepositoryService, objectStorageFactory, workingRoot);
-        var backupService = new BackupService(providerFactory, gitRepositoryService, objectStorageFactory, workingRoot);
-        var retentionService = new RetentionService(objectStorageFactory);
-        var scheduledJobRunner = new ScheduledJobRunner(() => liveSettings.Current, mirrorService, backupService, retentionService);
-
-        using var shutdown = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, eventArgs) =>
-        {
-            eventArgs.Cancel = true;
-            shutdown.Cancel();
-            AppLogger.Warn("Shutdown requested by Ctrl+C.");
-        };
-
-        AppLogger.Info("Scheduler started. Press Ctrl+C to stop.");
+        AppLogger.Initialize();
 
         try
         {
-            await scheduledJobRunner.RunForeverAsync(shutdown.Token);
-        }
-        catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
-        {
-            // Graceful shutdown.
-        }
+            BuildMetadata.LoadFromEnvironment();
+            AppLogger.Info("Git Protect started. Version {Version} ({Commit}).", BuildMetadata.Version, BuildMetadata.Commit);
 
-        AppLogger.Info("Scheduler stopped.");
-        return 0;
+            var settingsPath = ResolveSettingsPath(args);
+            AppLogger.Info("Using settings file {SettingsPath}.", settingsPath);
+
+            var settingsLoader = new SettingsLoader();
+            var settingsLoadResult = settingsLoader.Load(settingsPath);
+
+            if (!settingsLoadResult.IsSuccess)
+            {
+                AppLogger.Error("Failed to load settings file {SettingsPath}.", settingsPath);
+                foreach (var error in settingsLoadResult.Errors)
+                {
+                    AppLogger.Error("Settings validation error: {ValidationError}", error);
+                }
+
+                return 1;
+            }
+
+            var settings = settingsLoadResult.Settings!;
+            ApplyLogLevel(settings.Logging.LogLevel);
+            using var liveSettings = new LiveSettings(settingsPath, settings, settingsLoader);
+            liveSettings.Start();
+
+            AppLogger.Info(
+                "Configuration loaded. backups={BackupCount}, mirrors={MirrorCount}, watcher={SettingsPath}.",
+                settings.Backups.Count,
+                settings.Mirrors.Count,
+                liveSettings.SettingsPath);
+
+            var workingRoot = ResolveWorkingRoot();
+            Directory.CreateDirectory(workingRoot);
+            AppLogger.Info("Working directory ready: {WorkingRoot}", workingRoot);
+
+            Func<CLI.Configuration.Models.StorageConfig, IObjectStorageService> objectStorageFactory =
+                storage => new SimpleS3ObjectStorageService(storage);
+            var gitRepositoryService = new GitCliRepositoryService();
+            var providerFactory = new BackupProviderClientFactory(
+            [
+                new GitHubBackupProviderClient(),
+                new GitLabBackupProviderClient(),
+                new ForgejoBackupProviderClient()
+            ]);
+
+            var mirrorService = new MirrorService(gitRepositoryService, objectStorageFactory, workingRoot);
+            var backupService = new BackupService(providerFactory, gitRepositoryService, objectStorageFactory, workingRoot);
+            var retentionService = new RetentionService(objectStorageFactory);
+            var scheduledJobRunner = new ScheduledJobRunner(() => liveSettings.Current, mirrorService, backupService, retentionService);
+
+            using var shutdown = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, eventArgs) =>
+            {
+                eventArgs.Cancel = true;
+                shutdown.Cancel();
+                AppLogger.Warn("Shutdown requested by Ctrl+C.");
+            };
+
+            AppLogger.Info("Scheduler is running. Press Ctrl+C to stop.");
+
+            try
+            {
+                await scheduledJobRunner.RunForeverAsync(shutdown.Token);
+            }
+            catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+            {
+                // Graceful shutdown.
+            }
+
+            AppLogger.Info("Scheduler stopped.");
+            return 0;
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+        }
     }
 
     private static void ApplyLogLevel(string? configuredLogLevel)
@@ -94,12 +103,14 @@ class Program
         {
             AppLogger.SetMinimumLevel(AppLogLevel.Info);
             AppLogger.Warn(
-                $"Invalid log level '{configuredLogLevel}'. Falling back to '{AppLogger.DefaultLogLevel}'.");
+                "Invalid logging.logLevel value {ConfiguredLogLevel}. Falling back to {FallbackLevel}.",
+                configuredLogLevel,
+                AppLogger.DefaultLogLevel);
             return;
         }
 
         AppLogger.SetMinimumLevel(parsedLevel);
-        AppLogger.Info($"Active log level: {AppLogger.ToConfigValue(parsedLevel)}.");
+        AppLogger.Info("Active log level: {LogLevel}", AppLogger.ToConfigValue(parsedLevel));
     }
 
     private static string ResolveSettingsPath(string[] args)

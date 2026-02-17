@@ -35,7 +35,7 @@ public sealed class BackupService
     public async Task RunAsync(Settings settings, CancellationToken cancellationToken)
     {
         var enabledBackups = settings.Backups.Where(backup => backup?.Enabled != false).ToArray();
-        AppLogger.Info($"backup: run started with {enabledBackups.Length} configured job(s).");
+        AppLogger.Info("Backup run started. enabledJobs={EnabledJobCount}", enabledBackups.Length);
 
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var backupRegistryObjectKey = StorageKeyBuilder.BuildBackupIndexRegistryObjectKey();
@@ -48,25 +48,30 @@ public sealed class BackupService
         var backupRegistryChanged = false;
 
         AppLogger.Debug(
-            $"backup: storage endpoint='{settings.Storage.Endpoint}', bucket='{settings.Storage.Bucket}', region='{settings.Storage.Region}'.");
+            "Backup storage target configured. endpoint={Endpoint}, bucket={Bucket}, region={Region}.",
+            settings.Storage.Endpoint,
+            settings.Storage.Bucket,
+            settings.Storage.Region);
 
         foreach (var backup in enabledBackups)
         {
             if (backup is null || string.IsNullOrWhiteSpace(backup.Provider) || string.IsNullOrWhiteSpace(backup.Credential))
             {
-                AppLogger.Warn("backup: skipping job with missing provider or credential.");
+                AppLogger.Warn("Skipping backup job because provider or credential is missing.");
                 continue;
             }
 
             try
             {
-                AppLogger.Info($"backup: provider '{backup.Provider}' job started.");
+                AppLogger.Info("Backup provider job started. provider={Provider}", backup.Provider);
                 var providerClient = _providerFactory.Resolve(backup.Provider);
                 var credential = settings.Credentials[backup.Credential];
-                AppLogger.Info($"backup: listing repositories for provider '{backup.Provider}'.");
+                AppLogger.Info("Loading repositories from provider={Provider}.", backup.Provider);
                 var discoveredRepositories = await providerClient.ListOwnedRepositoriesAsync(backup, credential, cancellationToken);
                 AppLogger.Info(
-                    $"backup: provider '{backup.Provider}' returned {discoveredRepositories.Count} repository(ies).");
+                    "Provider repository discovery completed. provider={Provider}, repositories={RepositoryCount}.",
+                    backup.Provider,
+                    discoveredRepositories.Count);
                 var gitCredential = CredentialResolver.ResolveGitCredential(credential);
 
                 foreach (var repository in discoveredRepositories)
@@ -85,8 +90,12 @@ public sealed class BackupService
                         var backupPrefix = StorageKeyBuilder.BuildBackupPrefix(backup.Provider, pathInfo, timestamp);
                         var archiveObjectKey = $"{backupPrefix}/{ArchiveObjectName}";
                         var localPath = Path.Combine(_workingRoot, "backups", ComputeDeterministicFolderName($"{backup.Provider}:{repository.CloneUrl}"));
-                        AppLogger.Info($"backup: syncing '{repository.CloneUrl}'.");
-                        AppLogger.Debug($"backup: localPath='{localPath}', prefix='{backupPrefix}'.");
+                        AppLogger.Info("Repository backup started. repository={RepositoryUrl}", repository.CloneUrl);
+                        AppLogger.Debug(
+                            "Repository working paths resolved. repository={RepositoryUrl}, localPath={LocalPath}, targetPrefix={TargetPrefix}.",
+                            repository.CloneUrl,
+                            localPath,
+                            backupPrefix);
 
                         await _gitRepositoryService.SyncBareRepositoryAsync(
                             repository.CloneUrl,
@@ -96,7 +105,6 @@ public sealed class BackupService
                             includeLfs: backup.Lfs == true,
                             cancellationToken);
 
-                        AppLogger.Info($"backup: uploading git archive for '{repository.CloneUrl}'.");
                         var archiveUploadResult = await objectStorageService.UploadDirectoryAsTarGzAsync(
                             localPath,
                             archiveObjectKey,
@@ -137,7 +145,6 @@ public sealed class BackupService
 
                         if (archiveUploadResult.Uploaded)
                         {
-                            AppLogger.Info($"backup: writing marker for '{repository.CloneUrl}'.");
                             await objectStorageService.UploadTextAsync(
                                 $"{backupPrefix}/{BackupMarkerName}",
                                 $"{repository.CloneUrl}\n{timestamp:O}\nsha256={archiveUploadResult.Sha256}",
@@ -146,25 +153,36 @@ public sealed class BackupService
                         else
                         {
                             markersSkipped++;
-                            AppLogger.Info($"backup: marker skipped for '{repository.CloneUrl}' because repository is unchanged.");
+                            AppLogger.Debug(
+                                "Marker file skipped because repository content is unchanged. repository={RepositoryUrl}",
+                                repository.CloneUrl);
                         }
 
                         AppLogger.Info(
-                            $"backup: completed '{repository.CloneUrl}' to '{backupPrefix}' (archiveUploaded='{archiveUploadResult.Uploaded}').");
+                            "Repository backup completed. repository={RepositoryUrl}, destination={BackupPrefix}, archiveUploaded={ArchiveUploaded}.",
+                            repository.CloneUrl,
+                            backupPrefix,
+                            archiveUploadResult.Uploaded);
                     }
                     catch (Exception exception)
                     {
                         AppLogger.Error(
-                            $"backup: repository '{repository.CloneUrl}' failed: {exception.Message}",
-                            exception);
+                            exception,
+                            "Repository backup failed. repository={RepositoryUrl}, error={ErrorMessage}",
+                            repository.CloneUrl,
+                            exception.Message);
                     }
                 }
 
-                AppLogger.Info($"backup: provider '{backup.Provider}' job completed.");
+                AppLogger.Info("Backup provider job completed. provider={Provider}", backup.Provider);
             }
             catch (Exception exception)
             {
-                AppLogger.Error($"backup: provider '{backup.Provider}' failed: {exception.Message}", exception);
+                AppLogger.Error(
+                    exception,
+                    "Backup provider job failed. provider={Provider}, error={ErrorMessage}",
+                    backup.Provider,
+                    exception.Message);
             }
         }
 
@@ -178,7 +196,9 @@ public sealed class BackupService
         }
 
         AppLogger.Info(
-            $"backup: run completed. uploadsSkipped={uploadsSkipped}, markersSkipped={markersSkipped}.");
+            "Backup run completed. uploadsSkipped={UploadsSkipped}, markersSkipped={MarkersSkipped}.",
+            uploadsSkipped,
+            markersSkipped);
     }
 
     private static BackupIndexRegistryDocument ParseOrCreateBackupRegistry(string? json)
@@ -190,7 +210,7 @@ public sealed class BackupService
 
         if (!StorageIndexDocuments.TryDeserialize<BackupIndexRegistryDocument>(json, out var parsed) || parsed is null)
         {
-            AppLogger.Warn("backup: backup index registry is invalid JSON. Rebuilding registry.");
+            AppLogger.Warn("Backup index registry is invalid JSON. Rebuilding from discovered state.");
             return new BackupIndexRegistryDocument();
         }
 
@@ -212,7 +232,9 @@ public sealed class BackupService
         }
         else if (!StorageIndexDocuments.TryDeserialize<BackupRepositoryIndexDocument>(json, out var parsed) || parsed is null)
         {
-            AppLogger.Warn($"backup: repository index for '{repositoryIdentity}' is invalid JSON. Rebuilding index.");
+            AppLogger.Warn(
+                "Repository backup index is invalid JSON. Rebuilding index for repository={RepositoryIdentity}.",
+                repositoryIdentity);
             document = new BackupRepositoryIndexDocument();
         }
         else
