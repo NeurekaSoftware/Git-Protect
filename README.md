@@ -103,8 +103,3 @@ schedule:
   repositories:
     cron: "0 */6 * * *"
 ```
-
-## Migration Note
-
-The old `backups` and `mirrors` config keys are no longer supported.
-Use `repositories` with `mode: provider` or `mode: url`.
