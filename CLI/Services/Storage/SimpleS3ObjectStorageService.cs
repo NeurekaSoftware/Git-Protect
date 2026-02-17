@@ -1,6 +1,7 @@
-using System.Reflection;
 using System.Formats.Tar;
 using System.IO.Compression;
+using System.Reflection;
+using System.Security.Cryptography;
 using System.Text;
 using CLI.Configuration.Models;
 using CLI.Runtime;
@@ -9,7 +10,9 @@ using Genbox.SimpleS3.Core.Abstracts.Clients;
 using Genbox.SimpleS3.Core.Abstracts.Enums;
 using Genbox.SimpleS3.Core.Abstracts.Response;
 using Genbox.SimpleS3.Core.Common.Authentication;
+using Genbox.SimpleS3.Core.Common.Exceptions;
 using Genbox.SimpleS3.Core.Extensions;
+using Genbox.SimpleS3.Core.Network.Responses.Objects;
 using Genbox.SimpleS3.Extensions.GenericS3;
 using Genbox.SimpleS3.GenericS3;
 using Genbox.SimpleS3.ProviderBase;
@@ -18,12 +21,15 @@ namespace CLI.Services.Storage;
 
 public sealed class SimpleS3ObjectStorageService : IObjectStorageService
 {
+    private const string ArchiveHashMetadataKey = "gitprotect-sha256";
+
     private readonly IObjectClient _objectClient;
     private readonly string _bucket;
 
     public SimpleS3ObjectStorageService(StorageConfig storage)
     {
         _bucket = storage.Bucket!;
+
         var requestedPathStyle = storage.ForcePathStyle == true;
         var payloadSignatureMode = ResolvePayloadSignatureMode(storage.PayloadSignatureMode);
         var alwaysCalculateContentMd5 = storage.AlwaysCalculateContentMd5 == true;
@@ -45,38 +51,13 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         _objectClient = client;
         AppLogger.Info("storage: initialized S3 client.");
         AppLogger.Debug(
-            $"storage: endpoint='{storage.Endpoint}', resolvedEndpoint='{resolvedEndpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}', payloadSignatureMode='{payloadSignatureMode}', alwaysCalculateContentMd5='{alwaysCalculateContentMd5}'.");
+            $"storage: endpoint='{storage.Endpoint}', resolvedEndpoint='{resolvedEndpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}', payloadSignatureMode='{payloadSignatureMode}', alwaysCalculateContentMd5='{alwaysCalculateContentMd5}', archiveHashMetadataKey='{ArchiveHashMetadataKey}'.");
     }
 
-    public async Task UploadDirectoryAsync(string localDirectory, string prefix, CancellationToken cancellationToken)
-    {
-        if (!Directory.Exists(localDirectory))
-        {
-            throw new DirectoryNotFoundException($"Directory '{localDirectory}' does not exist.");
-        }
-
-        var normalizedPrefix = StorageKeyBuilder.EnsurePrefix(prefix);
-        AppLogger.Info($"storage: uploading directory '{localDirectory}' to prefix '{normalizedPrefix}'.");
-        var uploadedCount = 0;
-
-        foreach (var file in Directory.EnumerateFiles(localDirectory, "*", SearchOption.AllDirectories))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var relativePath = Path.GetRelativePath(localDirectory, file).Replace('\\', '/');
-            var objectKey = $"{normalizedPrefix}{relativePath}";
-            AppLogger.Debug($"storage: uploading file '{file}' as object '{objectKey}'.");
-
-            await using var stream = File.OpenRead(file);
-            var response = await _objectClient.PutObjectAsync(_bucket, objectKey, stream, _ => { }, cancellationToken);
-            EnsureSuccess(response, $"upload object '{objectKey}'");
-            uploadedCount++;
-        }
-
-        AppLogger.Info($"storage: uploaded {uploadedCount} object(s) to prefix '{normalizedPrefix}'.");
-    }
-
-    public async Task UploadDirectoryAsTarGzAsync(string localDirectory, string objectKey, CancellationToken cancellationToken)
+    public async Task<ArchiveUploadResult> UploadDirectoryAsTarGzAsync(
+        string localDirectory,
+        string objectKey,
+        CancellationToken cancellationToken)
     {
         if (!Directory.Exists(localDirectory))
         {
@@ -103,11 +84,42 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            var archiveSha256 = ComputeSha256Hex(temporaryArchivePath);
+            var headResponse = await TryHeadObjectAsync(normalizedObjectKey, cancellationToken);
+            var remoteHash = TryGetMetadataValue(headResponse?.Metadata, ArchiveHashMetadataKey);
+
+            if (headResponse is not null &&
+                !string.IsNullOrWhiteSpace(remoteHash) &&
+                string.Equals(remoteHash, archiveSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                AppLogger.Info(
+                    $"storage: skipping archive upload for object '{normalizedObjectKey}' because hash metadata matches.");
+                return new ArchiveUploadResult
+                {
+                    ObjectKey = normalizedObjectKey,
+                    Sha256 = archiveSha256,
+                    Uploaded = false,
+                    ComparedWithHead = true
+                };
+            }
 
             AppLogger.Info($"storage: uploading archive '{temporaryArchivePath}' as object '{normalizedObjectKey}'.");
             await using var stream = File.OpenRead(temporaryArchivePath);
-            var response = await _objectClient.PutObjectAsync(_bucket, normalizedObjectKey, stream, _ => { }, cancellationToken);
+            var response = await _objectClient.PutObjectAsync(
+                _bucket,
+                normalizedObjectKey,
+                stream,
+                request => request.Metadata.Add(ArchiveHashMetadataKey, archiveSha256),
+                cancellationToken);
             EnsureSuccess(response, $"upload archive object '{normalizedObjectKey}'");
+
+            return new ArchiveUploadResult
+            {
+                ObjectKey = normalizedObjectKey,
+                Sha256 = archiveSha256,
+                Uploaded = true,
+                ComparedWithHead = true
+            };
         }
         finally
         {
@@ -122,6 +134,28 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         await using var stream = new MemoryStream(bytes, writable: false);
         var response = await _objectClient.PutObjectAsync(_bucket, objectKey.Trim('/'), stream, _ => { }, cancellationToken);
         EnsureSuccess(response, $"upload text object '{objectKey.Trim('/')}'");
+    }
+
+    public async Task<string?> GetTextIfExistsAsync(string objectKey, CancellationToken cancellationToken)
+    {
+        var normalizedObjectKey = objectKey.Trim('/');
+        if (string.IsNullOrWhiteSpace(normalizedObjectKey))
+        {
+            throw new ArgumentException("Object key is required.", nameof(objectKey));
+        }
+
+        try
+        {
+            using var response = await _objectClient.GetObjectAsync(_bucket, normalizedObjectKey, _ => { }, cancellationToken);
+            EnsureSuccess(response, $"download text object '{normalizedObjectKey}'");
+
+            using var reader = new StreamReader(response.Content, Encoding.UTF8);
+            return await reader.ReadToEndAsync(cancellationToken);
+        }
+        catch (S3RequestException exception) when (IsNotFound(exception.Response))
+        {
+            return null;
+        }
     }
 
     public async Task<IReadOnlyList<string>> ListObjectKeysAsync(string prefix, CancellationToken cancellationToken)
@@ -172,6 +206,56 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             AppLogger.Debug($"storage: deleting batch with {batch.Length} object(s).");
             await ObjectClientExtensions.DeleteObjectsAsync(_objectClient, _bucket, batch, _ => { }, cancellationToken);
         }
+    }
+
+    private async Task<HeadObjectResponse?> TryHeadObjectAsync(string objectKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _objectClient.HeadObjectAsync(_bucket, objectKey, _ => { }, cancellationToken);
+            EnsureSuccess(response, $"head object '{objectKey}'");
+            return response;
+        }
+        catch (S3RequestException exception) when (IsNotFound(exception.Response))
+        {
+            return null;
+        }
+    }
+
+    private static bool IsNotFound(IResponse? response)
+    {
+        return response?.StatusCode == 404;
+    }
+
+    private static string? TryGetMetadataValue(IDictionary<string, string>? metadata, string key)
+    {
+        if (metadata is null || metadata.Count == 0)
+        {
+            return null;
+        }
+
+        if (metadata.TryGetValue(key, out var exactMatch))
+        {
+            return exactMatch;
+        }
+
+        foreach (var item in metadata)
+        {
+            if (string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return item.Value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string ComputeSha256Hex(string filePath)
+    {
+        using var sha256 = SHA256.Create();
+        using var stream = File.OpenRead(filePath);
+        var hash = sha256.ComputeHash(stream);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private static string? ExtractObjectKey(object item)

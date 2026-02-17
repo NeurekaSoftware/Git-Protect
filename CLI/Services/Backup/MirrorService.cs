@@ -32,10 +32,21 @@ public sealed class MirrorService
         AppLogger.Info($"mirror: run started with {enabledMirrors.Length} configured mirror(s).");
 
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
-        var archiveModeEnabled = settings.Storage.ArchiveMode == true;
-        AppLogger.Debug(
-            $"mirror: storage endpoint='{settings.Storage.Endpoint}', bucket='{settings.Storage.Bucket}', region='{settings.Storage.Region}'.");
+        var mirrorRegistryObjectKey = StorageKeyBuilder.BuildMirrorRegistryObjectKey();
+
+        var classAWrites = 0;
+        var classBReads = 0;
+        var uploadsSkipped = 0;
+        var markersSkipped = 0;
+        var prunedMirrors = 0;
+
+        classBReads++;
+        var mirrorRegistry = await LoadMirrorRegistryAsync(objectStorageService, mirrorRegistryObjectKey, cancellationToken);
+        var knownMirrorPrefixes = new HashSet<string>(mirrorRegistry.MirrorRoots, StringComparer.Ordinal);
         var activeMirrorPrefixes = new HashSet<string>(StringComparer.Ordinal);
+
+        AppLogger.Debug(
+            $"mirror: storage endpoint='{settings.Storage.Endpoint}', bucket='{settings.Storage.Bucket}', region='{settings.Storage.Region}', pruneOrphanedMirrors='{settings.Storage.PruneOrphanedMirrors}'.");
 
         foreach (var mirror in enabledMirrors)
         {
@@ -66,21 +77,43 @@ public sealed class MirrorService
                     mirror.Lfs == true,
                     cancellationToken);
 
-                if (archiveModeEnabled)
+                var archiveObjectKey = $"{mirrorPrefix}/{ArchiveObjectName}";
+                AppLogger.Info($"mirror: uploading git archive for '{mirror.Url}'.");
+                var archiveUploadResult = await objectStorageService.UploadDirectoryAsTarGzAsync(
+                    localPath,
+                    archiveObjectKey,
+                    cancellationToken);
+                if (archiveUploadResult.ComparedWithHead)
                 {
-                    var archiveObjectKey = $"{mirrorPrefix}/{ArchiveObjectName}";
-                    AppLogger.Info($"mirror: uploading git archive for '{mirror.Url}'.");
-                    await objectStorageService.UploadDirectoryAsTarGzAsync(localPath, archiveObjectKey, cancellationToken);
+                    classBReads++;
+                }
+
+                if (archiveUploadResult.Uploaded)
+                {
+                    classAWrites++;
                 }
                 else
                 {
-                    AppLogger.Info($"mirror: uploading git objects for '{mirror.Url}'.");
-                    await objectStorageService.UploadDirectoryAsync(localPath, mirrorPrefix, cancellationToken);
+                    uploadsSkipped++;
                 }
-                AppLogger.Info($"mirror: writing marker for '{mirror.Url}'.");
-                await objectStorageService.UploadTextAsync($"{mirrorPrefix}/{MirrorMarkerName}", mirror.Url, cancellationToken);
 
-                AppLogger.Info($"mirror: completed '{mirror.Url}' to '{mirrorPrefix}'.");
+                if (archiveUploadResult.Uploaded)
+                {
+                    AppLogger.Info($"mirror: writing marker for '{mirror.Url}'.");
+                    await objectStorageService.UploadTextAsync(
+                        $"{mirrorPrefix}/{MirrorMarkerName}",
+                        $"{mirror.Url}\nsha256={archiveUploadResult.Sha256}",
+                        cancellationToken);
+                    classAWrites++;
+                }
+                else
+                {
+                    markersSkipped++;
+                    AppLogger.Info($"mirror: marker skipped for '{mirror.Url}' because repository is unchanged.");
+                }
+
+                AppLogger.Info(
+                    $"mirror: completed '{mirror.Url}' to '{mirrorPrefix}' (archiveUploaded='{archiveUploadResult.Uploaded}').");
             }
             catch (Exception exception)
             {
@@ -88,43 +121,83 @@ public sealed class MirrorService
             }
         }
 
+        var mirrorRegistryChanged = false;
+
         if (settings.Storage.PruneOrphanedMirrors == true)
         {
             AppLogger.Info("mirror: pruning orphaned mirrors is enabled.");
-            await PruneOrphanedMirrorsAsync(objectStorageService, activeMirrorPrefixes, cancellationToken);
+            foreach (var mirrorPrefix in knownMirrorPrefixes)
+            {
+                if (activeMirrorPrefixes.Contains(mirrorPrefix))
+                {
+                    continue;
+                }
+
+                AppLogger.Info($"mirror: pruning orphaned mirror '{mirrorPrefix}'.");
+                await objectStorageService.DeletePrefixAsync(mirrorPrefix, cancellationToken);
+                prunedMirrors++;
+            }
+
+            if (!knownMirrorPrefixes.SetEquals(activeMirrorPrefixes))
+            {
+                mirrorRegistryChanged = true;
+                knownMirrorPrefixes = new HashSet<string>(activeMirrorPrefixes, StringComparer.Ordinal);
+            }
         }
         else
         {
             AppLogger.Debug("mirror: pruning orphaned mirrors is disabled.");
+            foreach (var activeMirrorPrefix in activeMirrorPrefixes)
+            {
+                if (knownMirrorPrefixes.Add(activeMirrorPrefix))
+                {
+                    mirrorRegistryChanged = true;
+                }
+            }
         }
 
-        AppLogger.Info("mirror: run completed.");
+        if (mirrorRegistryChanged)
+        {
+            mirrorRegistry.MirrorRoots = knownMirrorPrefixes.OrderBy(value => value, StringComparer.Ordinal).ToList();
+            await objectStorageService.UploadTextAsync(
+                mirrorRegistryObjectKey,
+                StorageIndexDocuments.Serialize(mirrorRegistry),
+                cancellationToken);
+            classAWrites++;
+        }
+
+        AppLogger.Info(
+            $"mirror: run completed. classAWrites={classAWrites}, classBReads={classBReads}, uploadsSkipped={uploadsSkipped}, markersSkipped={markersSkipped}, prunedMirrors={prunedMirrors}.");
     }
 
-    private async Task PruneOrphanedMirrorsAsync(
+    private static MirrorRegistryDocument ParseOrCreateMirrorRegistry(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new MirrorRegistryDocument();
+        }
+
+        if (!StorageIndexDocuments.TryDeserialize<MirrorRegistryDocument>(json, out var parsed) || parsed is null)
+        {
+            AppLogger.Warn("mirror: mirror registry is invalid JSON. Rebuilding registry.");
+            return new MirrorRegistryDocument();
+        }
+
+        parsed.MirrorRoots = (parsed.MirrorRoots ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim('/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return parsed;
+    }
+
+    private static async Task<MirrorRegistryDocument> LoadMirrorRegistryAsync(
         IObjectStorageService objectStorageService,
-        HashSet<string> activeMirrorPrefixes,
+        string mirrorRegistryObjectKey,
         CancellationToken cancellationToken)
     {
-        AppLogger.Info("mirror: checking for orphaned mirror prefixes.");
-        var mirrorKeys = await objectStorageService.ListObjectKeysAsync("mirrors/", cancellationToken);
-        var existingMirrorRoots = mirrorKeys
-            .Where(key => key.EndsWith($"/{MirrorMarkerName}", StringComparison.Ordinal))
-            .Select(key => key[..^($"/{MirrorMarkerName}".Length)])
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        AppLogger.Debug($"mirror: found {existingMirrorRoots.Length} mirror root(s) in storage.");
-
-        foreach (var mirrorRoot in existingMirrorRoots)
-        {
-            if (activeMirrorPrefixes.Contains(mirrorRoot))
-            {
-                continue;
-            }
-
-            AppLogger.Info($"mirror: pruning orphaned mirror '{mirrorRoot}'.");
-            await objectStorageService.DeletePrefixAsync(mirrorRoot, cancellationToken);
-        }
+        var registryContent = await objectStorageService.GetTextIfExistsAsync(mirrorRegistryObjectKey, cancellationToken);
+        return ParseOrCreateMirrorRegistry(registryContent);
     }
 
     private string BuildLocalPathFromPrefix(string mirrorPrefix)

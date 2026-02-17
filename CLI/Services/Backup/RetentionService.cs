@@ -1,14 +1,13 @@
 using CLI.Configuration;
 using CLI.Configuration.Models;
 using CLI.Runtime;
+using CLI.Services.Paths;
 using CLI.Services.Storage;
 
 namespace CLI.Services.Backup;
 
 public sealed class RetentionService
 {
-    private const string BackupMarkerName = ".backup-root";
-
     private readonly Func<StorageConfig, IObjectStorageService> _objectStorageServiceFactory;
 
     public RetentionService(Func<StorageConfig, IObjectStorageService> objectStorageServiceFactory)
@@ -27,82 +26,153 @@ public sealed class RetentionService
 
         AppLogger.Info($"retention: run started with retention='{retentionDays}' day(s).");
 
+        var classAWrites = 0;
+        var classBReads = 0;
+        var deletedCount = 0;
+        var updatedIndexCount = 0;
+
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays.Value);
-        AppLogger.Info($"retention: listing backup markers before cutoff '{cutoff:O}'.");
-        var backupKeys = await objectStorageService.ListObjectKeysAsync("backups/", cancellationToken);
-        AppLogger.Debug($"retention: loaded {backupKeys.Count} key(s) under backups/.");
+        var backupRegistryObjectKey = StorageKeyBuilder.BuildBackupIndexRegistryObjectKey();
 
-        var snapshots = backupKeys
-            .Where(key => key.EndsWith($"/{BackupMarkerName}", StringComparison.Ordinal))
-            .Select(ParseSnapshot)
-            .Where(snapshot => snapshot is not null)
-            .Cast<BackupSnapshot>()
-            .ToList();
-        AppLogger.Debug($"retention: parsed {snapshots.Count} snapshot marker(s).");
+        classBReads++;
+        var backupRegistryContent = await objectStorageService.GetTextIfExistsAsync(backupRegistryObjectKey, cancellationToken);
+        var backupRegistry = ParseOrCreateBackupRegistry(backupRegistryContent);
+        var knownIndexKeys = new HashSet<string>(backupRegistry.IndexKeys, StringComparer.Ordinal);
+        var backupRegistryChanged = false;
 
-        var snapshotsByRepository = snapshots
-            .GroupBy(snapshot => snapshot.RepositoryIdentity, StringComparer.Ordinal)
-            .ToList();
-        AppLogger.Debug($"retention: grouped snapshots into {snapshotsByRepository.Count} repository bucket(s).");
+        AppLogger.Info($"retention: processing backup indexes before cutoff '{cutoff:O}'.");
 
-        var deletedCount = 0;
-
-        foreach (var repositorySnapshots in snapshotsByRepository)
+        foreach (var backupIndexObjectKey in knownIndexKeys.ToArray())
         {
-            var expired = repositorySnapshots
-                .Where(snapshot => snapshot.Timestamp < cutoff)
-                .ToList();
-            AppLogger.Debug(
-                $"retention: repository '{repositorySnapshots.Key}' has {expired.Count} expired snapshot(s).");
+            classBReads++;
+            var backupIndexContent = await objectStorageService.GetTextIfExistsAsync(backupIndexObjectKey, cancellationToken);
+            if (string.IsNullOrWhiteSpace(backupIndexContent))
+            {
+                backupRegistryChanged = true;
+                knownIndexKeys.Remove(backupIndexObjectKey);
+                AppLogger.Warn($"retention: index '{backupIndexObjectKey}' is missing. Removing it from registry.");
+                continue;
+            }
 
-            foreach (var snapshot in expired)
+            if (!StorageIndexDocuments.TryDeserialize<BackupRepositoryIndexDocument>(backupIndexContent, out var backupIndex) ||
+                backupIndex is null)
+            {
+                AppLogger.Warn($"retention: index '{backupIndexObjectKey}' contains invalid JSON. Skipping.");
+                continue;
+            }
+
+            backupIndex.Snapshots ??= [];
+
+            var normalizedSnapshots = backupIndex.Snapshots
+                .Where(IsValidSnapshot)
+                .GroupBy(snapshot => snapshot.RootPrefix, StringComparer.Ordinal)
+                .Select(group => group.OrderByDescending(snapshot => snapshot.TimestampUnixSeconds).First())
+                .OrderByDescending(snapshot => snapshot.TimestampUnixSeconds)
+                .ToList();
+
+            if (normalizedSnapshots.Count == 0)
+            {
+                backupRegistryChanged = true;
+                knownIndexKeys.Remove(backupIndexObjectKey);
+                AppLogger.Warn($"retention: index '{backupIndexObjectKey}' has no valid snapshots. Removing it from registry.");
+                continue;
+            }
+
+            var newestSnapshotRootPrefix = normalizedSnapshots[0].RootPrefix;
+            var expiredSnapshots = normalizedSnapshots
+                .Skip(1)
+                .Where(snapshot => DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) < cutoff)
+                .ToArray();
+
+            foreach (var snapshot in expiredSnapshots)
             {
                 await objectStorageService.DeletePrefixAsync(snapshot.RootPrefix, cancellationToken);
+                classAWrites++;
                 deletedCount++;
                 AppLogger.Info($"retention: deleted expired backup '{snapshot.RootPrefix}'.");
             }
+
+            var retainedSnapshots = normalizedSnapshots
+                .Where(snapshot => string.Equals(snapshot.RootPrefix, newestSnapshotRootPrefix, StringComparison.Ordinal) ||
+                                   DateTimeOffset.FromUnixTimeSeconds(snapshot.TimestampUnixSeconds) >= cutoff)
+                .OrderByDescending(snapshot => snapshot.TimestampUnixSeconds)
+                .ToList();
+
+            if (!SnapshotsAreEqual(backupIndex.Snapshots, retainedSnapshots))
+            {
+                backupIndex.Snapshots = retainedSnapshots;
+                await objectStorageService.UploadTextAsync(
+                    backupIndexObjectKey,
+                    StorageIndexDocuments.Serialize(backupIndex),
+                    cancellationToken);
+                classAWrites++;
+                updatedIndexCount++;
+            }
         }
 
-        AppLogger.Info($"retention: run completed. Deleted {deletedCount} snapshot(s).");
+        if (backupRegistryChanged)
+        {
+            backupRegistry.IndexKeys = knownIndexKeys.OrderBy(value => value, StringComparer.Ordinal).ToList();
+            await objectStorageService.UploadTextAsync(
+                backupRegistryObjectKey,
+                StorageIndexDocuments.Serialize(backupRegistry),
+                cancellationToken);
+            classAWrites++;
+        }
+
+        AppLogger.Info(
+            $"retention: run completed. deletedSnapshots={deletedCount}, updatedIndexes={updatedIndexCount}, classAWrites={classAWrites}, classBReads={classBReads}.");
     }
 
-    private static BackupSnapshot? ParseSnapshot(string markerKey)
+    private static bool IsValidSnapshot(BackupSnapshotDocument snapshot)
     {
-        var rootPrefix = markerKey[..^($"/{BackupMarkerName}".Length)];
-        var segments = rootPrefix.Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-        if (segments.Length < 7)
-        {
-            return null;
-        }
-
-        if (!segments[0].Equals("backups", StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        if (!long.TryParse(segments[4], out var unixTimestamp))
-        {
-            return null;
-        }
-
-        var repositoryIdentity = string.Join('/', segments.Skip(5));
-
-        return new BackupSnapshot
-        {
-            RootPrefix = rootPrefix,
-            RepositoryIdentity = repositoryIdentity,
-            Timestamp = DateTimeOffset.FromUnixTimeSeconds(unixTimestamp)
-        };
+        return !string.IsNullOrWhiteSpace(snapshot.RootPrefix) && snapshot.TimestampUnixSeconds > 0;
     }
 
-    private sealed class BackupSnapshot
+    private static bool SnapshotsAreEqual(
+        IReadOnlyList<BackupSnapshotDocument> left,
+        IReadOnlyList<BackupSnapshotDocument> right)
     {
-        public required string RootPrefix { get; init; }
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
 
-        public required string RepositoryIdentity { get; init; }
+        for (var i = 0; i < left.Count; i++)
+        {
+            var leftSnapshot = left[i];
+            var rightSnapshot = right[i];
 
-        public required DateTimeOffset Timestamp { get; init; }
+            if (!string.Equals(leftSnapshot.RootPrefix, rightSnapshot.RootPrefix, StringComparison.Ordinal) ||
+                leftSnapshot.TimestampUnixSeconds != rightSnapshot.TimestampUnixSeconds ||
+                !string.Equals(leftSnapshot.ArchiveSha256, rightSnapshot.ArchiveSha256, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static BackupIndexRegistryDocument ParseOrCreateBackupRegistry(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new BackupIndexRegistryDocument();
+        }
+
+        if (!StorageIndexDocuments.TryDeserialize<BackupIndexRegistryDocument>(json, out var parsed) || parsed is null)
+        {
+            AppLogger.Warn("retention: backup index registry is invalid JSON. Rebuilding registry.");
+            return new BackupIndexRegistryDocument();
+        }
+
+        parsed.IndexKeys = (parsed.IndexKeys ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim('/'))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return parsed;
     }
 }

@@ -25,9 +25,6 @@ public sealed class StorageConfig
     [YamlMember(Alias = "alwaysCalculateContentMd5")]
     public bool? AlwaysCalculateContentMd5 { get; set; }
 
-    [YamlMember(Alias = "archiveMode")]
-    public bool? ArchiveMode { get; set; }
-
     [YamlMember(Alias = "bucket")]
     public string? Bucket { get; set; }
 

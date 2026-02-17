@@ -1,6 +1,7 @@
 # Git Protect
 
 Simple scheduled backup and mirror tool for Git repositories, with S3-compatible object storage support.
+Backups and mirrors are stored as `tar.gz` archives.
 
 ## Features
 
@@ -59,7 +60,6 @@ storage:
   alwaysCalculateContentMd5: false
   retention: 30
   pruneOrphanedMirrors: false
-  archiveMode: true
 
 credentials:
   github:

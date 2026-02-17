@@ -2,11 +2,14 @@ namespace CLI.Services.Storage;
 
 public interface IObjectStorageService
 {
-    Task UploadDirectoryAsync(string localDirectory, string prefix, CancellationToken cancellationToken);
-
-    Task UploadDirectoryAsTarGzAsync(string localDirectory, string objectKey, CancellationToken cancellationToken);
+    Task<ArchiveUploadResult> UploadDirectoryAsTarGzAsync(
+        string localDirectory,
+        string objectKey,
+        CancellationToken cancellationToken);
 
     Task UploadTextAsync(string objectKey, string content, CancellationToken cancellationToken);
+
+    Task<string?> GetTextIfExistsAsync(string objectKey, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<string>> ListObjectKeysAsync(string prefix, CancellationToken cancellationToken);
 
