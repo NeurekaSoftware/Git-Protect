@@ -1,14 +1,17 @@
 # Git Protect
 
-Simple scheduled repository snapshot tool for Git repositories, with S3-compatible object storage support.
-Repository snapshots are stored as `tar.gz` archives.
+Automatically back up repositories from major Git forges to your S3-compatible object storage.
 
 ## Features
 
-| Repository mode | Status | Notes |
+### Repository Modes
+
+| Mode | Status | Description |
 |---|---|---|
-| `provider` | ✅ | Backup your entire account from the most popular git forges. |
-| `url` | ✅ | Backup any repository URL directly without forge API discovery. |
+| `provider` | ✅ | Back up all repositories for an account from supported Git forges. |
+| `url` | ✅ | Back up any repository via direct URL, without forge API discovery. |
+
+### Supported Providers
 
 | Provider | Status |
 |---|---|
@@ -16,21 +19,25 @@ Repository snapshots are stored as `tar.gz` archives.
 | GitLab | ✅ |
 | Forgejo | ✅ |
 
-| Repository capability | GitHub | GitLab | Forgejo | URL mode |
+### Repository Capabilities
+
+| Capability | GitHub | GitLab | Forgejo | URL mode |
 |---|---|---|---|---|
-| Git repository | ✅ | ✅ | ✅ | ✅ |
+| Git repository data | ✅ | ✅ | ✅ | ✅ |
 | Git LFS objects | ✅ | ✅ | ✅ | ✅ |
 | Issues | ❌ | ❌ | ❌ | ❌ |
 | Issue comments | ❌ | ❌ | ❌ | ❌ |
-| Pull requests | ❌ | ❌ | ❌ | ❌ |
-| Pull request comments | ❌ | ❌ | ❌ | ❌ |
+| Pull requests / merge requests | ❌ | ❌ | ❌ | ❌ |
+| PR/MR comments | ❌ | ❌ | ❌ | ❌ |
 | Releases | ❌ | ❌ | ❌ | ❌ |
 | Release artifacts | ❌ | ❌ | ❌ | ❌ |
 | Gists / Snippets | ❌ | ❌ | ❌ | ❌ |
 
-| Protocol support | Status |
+### Protocol Support
+
+| Protocol | Status |
 |---|---|
-| HTTP/HTTPS | ✅ |
+| HTTP / HTTPS | ✅ |
 | SSH | ❌ |
 
 ## Quick Start
