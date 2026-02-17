@@ -5,6 +5,7 @@ using CLI.Runtime;
 using CLI.Services.Paths;
 using Genbox.SimpleS3.Core.Abstracts.Clients;
 using Genbox.SimpleS3.Core.Abstracts.Enums;
+using Genbox.SimpleS3.Core.Abstracts.Response;
 using Genbox.SimpleS3.Core.Common.Authentication;
 using Genbox.SimpleS3.Core.Extensions;
 using Genbox.SimpleS3.Extensions.GenericS3;
@@ -21,13 +22,16 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
     public SimpleS3ObjectStorageService(StorageConfig storage)
     {
         _bucket = storage.Bucket!;
+        var requestedPathStyle = storage.ForcePathStyle == true;
+        var resolvedEndpoint = ResolveEndpoint(storage.Endpoint!, _bucket, requestedPathStyle);
 
         var config = new GenericS3Config
         {
             Credentials = new StringAccessKey(storage.AccessKeyId!, storage.SecretAccessKey!),
-            Endpoint = storage.Endpoint!.TrimEnd('/'),
+            Endpoint = resolvedEndpoint,
             RegionCode = storage.Region!,
-            NamingMode = storage.ForcePathStyle == true ? NamingMode.PathStyle : NamingMode.VirtualHost
+            NamingMode = requestedPathStyle ? NamingMode.PathStyle : NamingMode.VirtualHost,
+            ThrowExceptionOnError = true
         };
 
         var client = new GenericS3Client(config, new NetworkConfig());
@@ -35,7 +39,7 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         _objectClient = client;
         AppLogger.Info("storage: initialized S3 client.");
         AppLogger.Debug(
-            $"storage: endpoint='{storage.Endpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}'.");
+            $"storage: endpoint='{storage.Endpoint}', resolvedEndpoint='{resolvedEndpoint}', region='{storage.Region}', bucket='{storage.Bucket}', forcePathStyle='{storage.ForcePathStyle}'.");
     }
 
     public async Task UploadDirectoryAsync(string localDirectory, string prefix, CancellationToken cancellationToken)
@@ -58,7 +62,8 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             AppLogger.Debug($"storage: uploading file '{file}' as object '{objectKey}'.");
 
             await using var stream = File.OpenRead(file);
-            await _objectClient.PutObjectAsync(_bucket, objectKey, stream, _ => { }, cancellationToken);
+            var response = await _objectClient.PutObjectAsync(_bucket, objectKey, stream, _ => { }, cancellationToken);
+            EnsureSuccess(response, $"upload object '{objectKey}'");
             uploadedCount++;
         }
 
@@ -70,7 +75,8 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         AppLogger.Info($"storage: uploading text object '{objectKey.Trim('/')}'.");
         var bytes = Encoding.UTF8.GetBytes(content);
         await using var stream = new MemoryStream(bytes, writable: false);
-        await _objectClient.PutObjectAsync(_bucket, objectKey.Trim('/'), stream, _ => { }, cancellationToken);
+        var response = await _objectClient.PutObjectAsync(_bucket, objectKey.Trim('/'), stream, _ => { }, cancellationToken);
+        EnsureSuccess(response, $"upload text object '{objectKey.Trim('/')}'");
     }
 
     public async Task<IReadOnlyList<string>> ListObjectKeysAsync(string prefix, CancellationToken cancellationToken)
@@ -139,5 +145,54 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         }
 
         return (string?)property.GetValue(instance);
+    }
+
+    private static string ResolveEndpoint(string configuredEndpoint, string bucket, bool forcePathStyle)
+    {
+        var endpoint = configuredEndpoint.Trim();
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return endpoint;
+        }
+
+        if (endpoint.Contains('{'))
+        {
+            return endpoint.TrimEnd('/');
+        }
+
+        if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+        {
+            return endpoint.TrimEnd('/');
+        }
+
+        if (forcePathStyle)
+        {
+            return endpoint.TrimEnd('/');
+        }
+
+        var host = uri.Host;
+        var bucketPrefix = $"{bucket}.";
+        if (host.StartsWith(bucketPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            host = host[bucketPrefix.Length..];
+        }
+
+        var authority = uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
+        var path = uri.AbsolutePath == "/" ? string.Empty : uri.AbsolutePath.TrimEnd('/');
+        return $"{uri.Scheme}://{{Bucket}}.{authority}{path}";
+    }
+
+    private static void EnsureSuccess(IResponse response, string operation)
+    {
+        if (response.IsSuccess)
+        {
+            return;
+        }
+
+        var detail = response.Error is null
+            ? $"statusCode={response.StatusCode}"
+            : $"{response.Error.Code}: {response.Error.Message} ({response.Error.GetErrorDetails()})";
+
+        throw new InvalidOperationException($"storage: failed to {operation}. {detail}");
     }
 }
