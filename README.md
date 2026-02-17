@@ -53,6 +53,7 @@ storage:
   region: auto
   bucket: git-protect
   forcePathStyle: false
+  archiveMode: true
   accessKeyId: accessKeyId
   secretAccessKey: secretAccessKey
   retention: 30

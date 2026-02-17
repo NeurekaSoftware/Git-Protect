@@ -10,6 +10,7 @@ namespace CLI.Services.Backup;
 public sealed class MirrorService
 {
     private const string MirrorMarkerName = ".mirror-root";
+    private const string ArchiveObjectName = "repo.tar.gz";
 
     private readonly IGitRepositoryService _gitRepositoryService;
     private readonly Func<StorageConfig, IObjectStorageService> _objectStorageServiceFactory;
@@ -31,6 +32,7 @@ public sealed class MirrorService
         AppLogger.Info($"mirror: run started with {enabledMirrors.Length} configured mirror(s).");
 
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
+        var archiveModeEnabled = settings.Storage.ArchiveMode == true;
         AppLogger.Debug(
             $"mirror: storage endpoint='{settings.Storage.Endpoint}', bucket='{settings.Storage.Bucket}', region='{settings.Storage.Region}'.");
         var activeMirrorPrefixes = new HashSet<string>(StringComparer.Ordinal);
@@ -64,8 +66,17 @@ public sealed class MirrorService
                     mirror.Lfs == true,
                     cancellationToken);
 
-                AppLogger.Info($"mirror: uploading git objects for '{mirror.Url}'.");
-                await objectStorageService.UploadDirectoryAsync(localPath, mirrorPrefix, cancellationToken);
+                if (archiveModeEnabled)
+                {
+                    var archiveObjectKey = $"{mirrorPrefix}/{ArchiveObjectName}";
+                    AppLogger.Info($"mirror: uploading git archive for '{mirror.Url}'.");
+                    await objectStorageService.UploadDirectoryAsTarGzAsync(localPath, archiveObjectKey, cancellationToken);
+                }
+                else
+                {
+                    AppLogger.Info($"mirror: uploading git objects for '{mirror.Url}'.");
+                    await objectStorageService.UploadDirectoryAsync(localPath, mirrorPrefix, cancellationToken);
+                }
                 AppLogger.Info($"mirror: writing marker for '{mirror.Url}'.");
                 await objectStorageService.UploadTextAsync($"{mirrorPrefix}/{MirrorMarkerName}", mirror.Url, cancellationToken);
 

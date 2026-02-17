@@ -67,6 +67,7 @@ public sealed class SettingsLoader
         settings.Logging.LogLevel = NormalizeLogLevel(settings.Logging.LogLevel);
         settings.Storage ??= new StorageConfig();
         settings.Storage.ForcePathStyle ??= false;
+        settings.Storage.ArchiveMode ??= true;
         settings.Storage.PruneOrphanedMirrors ??= false;
         settings.Credentials ??= new Dictionary<string, CredentialConfig>(StringComparer.OrdinalIgnoreCase);
         settings.Credentials = new Dictionary<string, CredentialConfig>(settings.Credentials, StringComparer.OrdinalIgnoreCase);

@@ -19,6 +19,9 @@ public sealed class StorageConfig
     [YamlMember(Alias = "forcePathStyle")]
     public bool? ForcePathStyle { get; set; }
 
+    [YamlMember(Alias = "archiveMode")]
+    public bool? ArchiveMode { get; set; }
+
     [YamlMember(Alias = "bucket")]
     public string? Bucket { get; set; }
 

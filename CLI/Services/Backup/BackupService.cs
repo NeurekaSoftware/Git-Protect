@@ -13,6 +13,7 @@ namespace CLI.Services.Backup;
 public sealed class BackupService
 {
     private const string BackupMarkerName = ".backup-root";
+    private const string ArchiveObjectName = "repo.tar.gz";
 
     private readonly BackupProviderClientFactory _providerFactory;
     private readonly IGitRepositoryService _gitRepositoryService;
@@ -37,6 +38,7 @@ public sealed class BackupService
         AppLogger.Info($"backup: run started with {enabledBackups.Length} configured job(s).");
 
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
+        var archiveModeEnabled = settings.Storage.ArchiveMode == true;
         AppLogger.Debug(
             $"backup: storage endpoint='{settings.Storage.Endpoint}', bucket='{settings.Storage.Bucket}', region='{settings.Storage.Region}'.");
 
@@ -80,8 +82,17 @@ public sealed class BackupService
                             includeLfs: backup.Lfs == true,
                             cancellationToken);
 
-                        AppLogger.Info($"backup: uploading git objects for '{repository.CloneUrl}'.");
-                        await objectStorageService.UploadDirectoryAsync(localPath, backupPrefix, cancellationToken);
+                        if (archiveModeEnabled)
+                        {
+                            var archiveObjectKey = $"{backupPrefix}/{ArchiveObjectName}";
+                            AppLogger.Info($"backup: uploading git archive for '{repository.CloneUrl}'.");
+                            await objectStorageService.UploadDirectoryAsTarGzAsync(localPath, archiveObjectKey, cancellationToken);
+                        }
+                        else
+                        {
+                            AppLogger.Info($"backup: uploading git objects for '{repository.CloneUrl}'.");
+                            await objectStorageService.UploadDirectoryAsync(localPath, backupPrefix, cancellationToken);
+                        }
                         AppLogger.Info($"backup: writing marker for '{repository.CloneUrl}'.");
                         await objectStorageService.UploadTextAsync(
                             $"{backupPrefix}/{BackupMarkerName}",

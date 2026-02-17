@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Formats.Tar;
+using System.IO.Compression;
 using System.Text;
 using CLI.Configuration.Models;
 using CLI.Runtime;
@@ -68,6 +70,45 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         }
 
         AppLogger.Info($"storage: uploaded {uploadedCount} object(s) to prefix '{normalizedPrefix}'.");
+    }
+
+    public async Task UploadDirectoryAsTarGzAsync(string localDirectory, string objectKey, CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(localDirectory))
+        {
+            throw new DirectoryNotFoundException($"Directory '{localDirectory}' does not exist.");
+        }
+
+        var normalizedObjectKey = objectKey.Trim('/');
+        if (string.IsNullOrWhiteSpace(normalizedObjectKey))
+        {
+            throw new ArgumentException("Object key is required.", nameof(objectKey));
+        }
+
+        var temporaryArchivePath = Path.Combine(Path.GetTempPath(), $"git-protect-{Guid.NewGuid():N}.tar.gz");
+        AppLogger.Info($"storage: creating archive from '{localDirectory}' for object '{normalizedObjectKey}'.");
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await using (var archiveFileStream = File.Create(temporaryArchivePath))
+            await using (var gzipStream = new GZipStream(archiveFileStream, CompressionLevel.SmallestSize))
+            {
+                TarFile.CreateFromDirectory(localDirectory, gzipStream, includeBaseDirectory: false);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            AppLogger.Info($"storage: uploading archive '{temporaryArchivePath}' as object '{normalizedObjectKey}'.");
+            await using var stream = File.OpenRead(temporaryArchivePath);
+            var response = await _objectClient.PutObjectAsync(_bucket, normalizedObjectKey, stream, _ => { }, cancellationToken);
+            EnsureSuccess(response, $"upload archive object '{normalizedObjectKey}'");
+        }
+        finally
+        {
+            TryDeleteTemporaryFile(temporaryArchivePath);
+        }
     }
 
     public async Task UploadTextAsync(string objectKey, string content, CancellationToken cancellationToken)
@@ -194,5 +235,20 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
             : $"{response.Error.Code}: {response.Error.Message} ({response.Error.GetErrorDetails()})";
 
         throw new InvalidOperationException($"storage: failed to {operation}. {detail}");
+    }
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Warn($"storage: failed to remove temporary archive '{path}': {exception.Message}");
+        }
     }
 }
