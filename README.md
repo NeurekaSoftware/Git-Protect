@@ -7,8 +7,14 @@ Repository snapshots are stored as `tar.gz` archives.
 
 | Repository mode | Status | Notes |
 |---|---|---|
-| `provider` | ✅ | Discover owned repositories from GitHub, GitLab, or Forgejo API. |
-| `url` | ✅ | Track any repository URL directly without forge API discovery. |
+| `provider` | ✅ | Backup your entire account from the most popular git forges. |
+| `url` | ✅ | Backup any repository URL directly without forge API discovery. |
+
+| Provider | Status |
+|---|---|
+| GitHub | ✅ |
+| GitLab | ✅ |
+| Forgejo | ✅ |
 
 | Repository capability | GitHub | GitLab | Forgejo | URL mode |
 |---|---|---|---|---|
@@ -16,10 +22,11 @@ Repository snapshots are stored as `tar.gz` archives.
 | Git LFS objects | ✅ | ✅ | ✅ | ✅ |
 | Issues | ❌ | ❌ | ❌ | ❌ |
 | Issue comments | ❌ | ❌ | ❌ | ❌ |
-| Pull requests / Merge requests | ❌ | ❌ | ❌ | ❌ |
-| PR/MR comments | ❌ | ❌ | ❌ | ❌ |
+| Pull requests | ❌ | ❌ | ❌ | ❌ |
+| Pull request comments | ❌ | ❌ | ❌ | ❌ |
 | Releases | ❌ | ❌ | ❌ | ❌ |
 | Release artifacts | ❌ | ❌ | ❌ | ❌ |
+| Gists / Snippets | ❌ | ❌ | ❌ | ❌ |
 
 | Protocol support | Status |
 |---|---|
