@@ -193,11 +193,58 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         }
 
         AppLogger.Info("Deleting objects. count={ObjectCount}.", keys.Length);
+        var useSingleObjectDeletes = false;
+
         foreach (var batch in keys.Chunk(1000))
         {
+            if (useSingleObjectDeletes)
+            {
+                await DeleteObjectsIndividuallyAsync(batch, cancellationToken);
+                continue;
+            }
+
             AppLogger.Debug("Deleting object batch. batchSize={BatchSize}.", batch.Length);
-            await ObjectClientExtensions.DeleteObjectsAsync(_objectClient, _bucket, batch, _ => { }, cancellationToken);
+            try
+            {
+                await ObjectClientExtensions.DeleteObjectsAsync(_objectClient, _bucket, batch, _ => { }, cancellationToken);
+            }
+            catch (S3RequestException exception) when (IsBulkDeleteSchemaError(exception))
+            {
+                AppLogger.Warn(
+                    "Bulk delete request was rejected by the storage provider. Switching to single-object deletes. batchSize={BatchSize}, error={ErrorMessage}.",
+                    batch.Length,
+                    exception.Message);
+                useSingleObjectDeletes = true;
+                await DeleteObjectsIndividuallyAsync(batch, cancellationToken);
+            }
         }
+    }
+
+    private async Task DeleteObjectsIndividuallyAsync(IEnumerable<string> objectKeys, CancellationToken cancellationToken)
+    {
+        var deletedCount = 0;
+        foreach (var objectKey in objectKeys)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var response = await _objectClient.DeleteObjectAsync(_bucket, objectKey, _ => { }, cancellationToken);
+            EnsureSuccess(response, $"delete object '{objectKey}'");
+            deletedCount++;
+        }
+
+        AppLogger.Debug("Single-object delete batch completed. batchSize={BatchSize}.", deletedCount);
+    }
+
+    private static bool IsBulkDeleteSchemaError(S3RequestException exception)
+    {
+        var message = exception.Message;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        return message.Contains("MalformedXML", StringComparison.OrdinalIgnoreCase)
+               || message.Contains("XML you provided was not well formed", StringComparison.OrdinalIgnoreCase)
+               || message.Contains("did not validate against our published schema", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsNotFound(IResponse? response)
