@@ -13,7 +13,7 @@ namespace CLI.Services.Backup;
 public sealed class BackupService
 {
     private const string BackupMarkerName = ".backup-root";
-    private const string ArchiveObjectName = "repo.tar.gz";
+    private const string ArchiveObjectNameSuffix = "_repo.tar.gz";
 
     private readonly BackupProviderClientFactory _providerFactory;
     private readonly IGitRepositoryService _gitRepositoryService;
@@ -87,8 +87,8 @@ public sealed class BackupService
                         var indexDocument = ParseOrCreateRepositoryIndex(indexContent, repositoryIdentity);
                         var latestArchiveSha256 = GetLatestSnapshotSha256(indexDocument);
                         var timestamp = DateTimeOffset.UtcNow;
-                        var backupPrefix = StorageKeyBuilder.BuildBackupPrefix(backup.Provider, pathInfo, timestamp);
-                        var archiveObjectKey = $"{backupPrefix}/{ArchiveObjectName}";
+                        var backupPrefix = StorageKeyBuilder.BuildBackupPrefix(backup.Provider, pathInfo);
+                        var archiveObjectKey = $"{backupPrefix}/{BuildArchiveObjectName(timestamp)}";
                         var localPath = Path.Combine(_workingRoot, "backups", ComputeDeterministicFolderName($"{backup.Provider}:{repository.CloneUrl}"));
                         AppLogger.Info("Repository backup started. repository={RepositoryUrl}", repository.CloneUrl);
                         AppLogger.Debug(
@@ -115,11 +115,11 @@ public sealed class BackupService
                         {
                             indexDocument.Snapshots = indexDocument.Snapshots
                                 .Where(IsValidSnapshot)
-                                .Where(snapshot => !string.Equals(snapshot.RootPrefix, backupPrefix, StringComparison.Ordinal))
+                                .Where(snapshot => !string.Equals(snapshot.RootPrefix, archiveObjectKey, StringComparison.Ordinal))
                                 .ToList();
                             indexDocument.Snapshots.Add(new BackupSnapshotDocument
                             {
-                                RootPrefix = backupPrefix,
+                                RootPrefix = archiveObjectKey,
                                 TimestampUnixSeconds = timestamp.ToUnixTimeSeconds(),
                                 ArchiveSha256 = archiveUploadResult.Sha256
                             });
@@ -274,5 +274,10 @@ public sealed class BackupService
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string BuildArchiveObjectName(DateTimeOffset timestamp)
+    {
+        return $"{timestamp.ToUnixTimeSeconds()}{ArchiveObjectNameSuffix}";
     }
 }

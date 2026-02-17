@@ -23,15 +23,11 @@ public static class StorageKeyBuilder
         return string.Join('/', segments);
     }
 
-    public static string BuildBackupPrefix(string provider, RepositoryPathInfo repository, DateTimeOffset timestamp)
+    public static string BuildBackupPrefix(string provider, RepositoryPathInfo repository)
     {
         var segments = new List<string>
         {
             "backups",
-            timestamp.ToString("yyyy"),
-            timestamp.ToString("MM"),
-            timestamp.ToString("dd"),
-            timestamp.ToUnixTimeSeconds().ToString(),
             provider.Trim().ToLowerInvariant()
         };
 

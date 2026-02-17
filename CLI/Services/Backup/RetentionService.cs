@@ -89,9 +89,9 @@ public sealed class RetentionService
 
             foreach (var snapshot in expiredSnapshots)
             {
-                await objectStorageService.DeletePrefixAsync(snapshot.RootPrefix, cancellationToken);
+                await DeleteSnapshotStorageAsync(objectStorageService, snapshot.RootPrefix, cancellationToken);
                 deletedCount++;
-                AppLogger.Info("Deleted expired backup snapshot. prefix={SnapshotPrefix}", snapshot.RootPrefix);
+                AppLogger.Info("Deleted expired backup snapshot. target={SnapshotTarget}", snapshot.RootPrefix);
             }
 
             var retainedSnapshots = normalizedSnapshots
@@ -129,6 +129,14 @@ public sealed class RetentionService
     private static bool IsValidSnapshot(BackupSnapshotDocument snapshot)
     {
         return !string.IsNullOrWhiteSpace(snapshot.RootPrefix) && snapshot.TimestampUnixSeconds > 0;
+    }
+
+    private static async Task DeleteSnapshotStorageAsync(
+        IObjectStorageService objectStorageService,
+        string snapshotRootPrefix,
+        CancellationToken cancellationToken)
+    {
+        await objectStorageService.DeleteObjectsAsync([snapshotRootPrefix], cancellationToken);
     }
 
     private static bool SnapshotsAreEqual(
