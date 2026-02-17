@@ -2,6 +2,9 @@
 
 Automatically back up repositories from major Git forges to your S3-compatible object storage.
 
+> [!WARNING]  
+> This software is under active development. Expect breaking changes and incomplete features.
+
 ## Features
 
 ### Repository Modes
