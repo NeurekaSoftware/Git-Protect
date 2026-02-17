@@ -92,11 +92,12 @@ public sealed class ScheduledJobRunner
             }
 
             var secondsUntilNextRun = Math.Max(0L, (long)Math.Ceiling((nextOccurrence.Value - now).TotalSeconds));
+            var nextRunDelay = DurationFormatter.FormatShort(secondsUntilNextRun);
             AppLogger.Info(
-                "{JobName}: next run at {NextRunTimestamp} (in {SecondsUntilNextRun} seconds).",
+                "{JobName}: next run at {NextRunTimestamp} (in {NextRunDelay}).",
                 jobName,
                 AppLogger.FormatTimestamp(nextOccurrence.Value),
-                secondsUntilNextRun);
+                nextRunDelay);
             var waitResult = await DelayUntilUtcAsync(
                 jobName,
                 nextOccurrence.Value,
