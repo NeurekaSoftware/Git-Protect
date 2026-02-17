@@ -26,8 +26,6 @@ public sealed class RetentionService
 
         AppLogger.Info($"retention: run started with retention='{retentionDays}' day(s).");
 
-        var classAWrites = 0;
-        var classBReads = 0;
         var deletedCount = 0;
         var updatedIndexCount = 0;
 
@@ -35,7 +33,6 @@ public sealed class RetentionService
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays.Value);
         var backupRegistryObjectKey = StorageKeyBuilder.BuildBackupIndexRegistryObjectKey();
 
-        classBReads++;
         var backupRegistryContent = await objectStorageService.GetTextIfExistsAsync(backupRegistryObjectKey, cancellationToken);
         var backupRegistry = ParseOrCreateBackupRegistry(backupRegistryContent);
         var knownIndexKeys = new HashSet<string>(backupRegistry.IndexKeys, StringComparer.Ordinal);
@@ -45,7 +42,6 @@ public sealed class RetentionService
 
         foreach (var backupIndexObjectKey in knownIndexKeys.ToArray())
         {
-            classBReads++;
             var backupIndexContent = await objectStorageService.GetTextIfExistsAsync(backupIndexObjectKey, cancellationToken);
             if (string.IsNullOrWhiteSpace(backupIndexContent))
             {
@@ -88,7 +84,6 @@ public sealed class RetentionService
             foreach (var snapshot in expiredSnapshots)
             {
                 await objectStorageService.DeletePrefixAsync(snapshot.RootPrefix, cancellationToken);
-                classAWrites++;
                 deletedCount++;
                 AppLogger.Info($"retention: deleted expired backup '{snapshot.RootPrefix}'.");
             }
@@ -106,7 +101,6 @@ public sealed class RetentionService
                     backupIndexObjectKey,
                     StorageIndexDocuments.Serialize(backupIndex),
                     cancellationToken);
-                classAWrites++;
                 updatedIndexCount++;
             }
         }
@@ -118,11 +112,10 @@ public sealed class RetentionService
                 backupRegistryObjectKey,
                 StorageIndexDocuments.Serialize(backupRegistry),
                 cancellationToken);
-            classAWrites++;
         }
 
         AppLogger.Info(
-            $"retention: run completed. deletedSnapshots={deletedCount}, updatedIndexes={updatedIndexCount}, classAWrites={classAWrites}, classBReads={classBReads}.");
+            $"retention: run completed. deletedSnapshots={deletedCount}, updatedIndexes={updatedIndexCount}.");
     }
 
     private static bool IsValidSnapshot(BackupSnapshotDocument snapshot)

@@ -34,13 +34,10 @@ public sealed class MirrorService
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var mirrorRegistryObjectKey = StorageKeyBuilder.BuildMirrorRegistryObjectKey();
 
-        var classAWrites = 0;
-        var classBReads = 0;
         var uploadsSkipped = 0;
         var markersSkipped = 0;
         var prunedMirrors = 0;
 
-        classBReads++;
         var mirrorRegistry = await LoadMirrorRegistryAsync(objectStorageService, mirrorRegistryObjectKey, cancellationToken);
         var knownMirrorPrefixes = new HashSet<string>(mirrorRegistry.MirrorRoots, StringComparer.Ordinal);
         var activeMirrorPrefixes = new HashSet<string>(StringComparer.Ordinal);
@@ -83,16 +80,7 @@ public sealed class MirrorService
                     localPath,
                     archiveObjectKey,
                     cancellationToken);
-                if (archiveUploadResult.ComparedWithHead)
-                {
-                    classBReads++;
-                }
-
-                if (archiveUploadResult.Uploaded)
-                {
-                    classAWrites++;
-                }
-                else
+                if (!archiveUploadResult.Uploaded)
                 {
                     uploadsSkipped++;
                 }
@@ -104,7 +92,6 @@ public sealed class MirrorService
                         $"{mirrorPrefix}/{MirrorMarkerName}",
                         $"{mirror.Url}\nsha256={archiveUploadResult.Sha256}",
                         cancellationToken);
-                    classAWrites++;
                 }
                 else
                 {
@@ -163,11 +150,10 @@ public sealed class MirrorService
                 mirrorRegistryObjectKey,
                 StorageIndexDocuments.Serialize(mirrorRegistry),
                 cancellationToken);
-            classAWrites++;
         }
 
         AppLogger.Info(
-            $"mirror: run completed. classAWrites={classAWrites}, classBReads={classBReads}, uploadsSkipped={uploadsSkipped}, markersSkipped={markersSkipped}, prunedMirrors={prunedMirrors}.");
+            $"mirror: run completed. uploadsSkipped={uploadsSkipped}, markersSkipped={markersSkipped}, prunedMirrors={prunedMirrors}.");
     }
 
     private static MirrorRegistryDocument ParseOrCreateMirrorRegistry(string? json)

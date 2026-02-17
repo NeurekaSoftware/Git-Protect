@@ -40,12 +40,9 @@ public sealed class BackupService
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var backupRegistryObjectKey = StorageKeyBuilder.BuildBackupIndexRegistryObjectKey();
 
-        var classAWrites = 0;
-        var classBReads = 0;
         var uploadsSkipped = 0;
         var markersSkipped = 0;
 
-        classBReads++;
         var backupRegistry = await LoadBackupRegistryAsync(objectStorageService, backupRegistryObjectKey, cancellationToken);
         var knownIndexKeys = new HashSet<string>(backupRegistry.IndexKeys, StringComparer.Ordinal);
         var backupRegistryChanged = false;
@@ -101,15 +98,8 @@ public sealed class BackupService
                             localPath,
                             archiveObjectKey,
                             cancellationToken);
-                        if (archiveUploadResult.ComparedWithHead)
-                        {
-                            classBReads++;
-                        }
-
                         if (archiveUploadResult.Uploaded)
                         {
-                            classAWrites++;
-                            classBReads++;
                             var indexContent = await objectStorageService.GetTextIfExistsAsync(backupIndexObjectKey, cancellationToken);
                             var indexDocument = ParseOrCreateRepositoryIndex(indexContent, repositoryIdentity);
                             indexDocument.Snapshots = indexDocument.Snapshots
@@ -127,7 +117,6 @@ public sealed class BackupService
                                 backupIndexObjectKey,
                                 StorageIndexDocuments.Serialize(indexDocument),
                                 cancellationToken);
-                            classAWrites++;
 
                             if (knownIndexKeys.Add(backupIndexObjectKey))
                             {
@@ -146,7 +135,6 @@ public sealed class BackupService
                                 $"{backupPrefix}/{BackupMarkerName}",
                                 $"{repository.CloneUrl}\n{timestamp:O}\nsha256={archiveUploadResult.Sha256}",
                                 cancellationToken);
-                            classAWrites++;
                         }
                         else
                         {
@@ -180,11 +168,10 @@ public sealed class BackupService
                 backupRegistryObjectKey,
                 StorageIndexDocuments.Serialize(backupRegistry),
                 cancellationToken);
-            classAWrites++;
         }
 
         AppLogger.Info(
-            $"backup: run completed. classAWrites={classAWrites}, classBReads={classBReads}, uploadsSkipped={uploadsSkipped}, markersSkipped={markersSkipped}.");
+            $"backup: run completed. uploadsSkipped={uploadsSkipped}, markersSkipped={markersSkipped}.");
     }
 
     private static BackupIndexRegistryDocument ParseOrCreateBackupRegistry(string? json)
