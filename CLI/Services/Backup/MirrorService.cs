@@ -77,7 +77,7 @@ public sealed class MirrorService
                     mirror.Url,
                     localPath,
                     credential,
-                    mirror.Force == true,
+                    force: false,
                     mirror.Lfs == true,
                     cancellationToken);
 

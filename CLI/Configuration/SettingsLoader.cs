@@ -106,7 +106,6 @@ public sealed class SettingsLoader
 
             mirror.Enabled ??= true;
             mirror.Lfs ??= false;
-            mirror.Force ??= false;
         }
     }
 

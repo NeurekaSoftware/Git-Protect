@@ -13,9 +13,6 @@ public sealed class MirrorJobConfig
     [YamlMember(Alias = "lfs")]
     public bool? Lfs { get; set; }
 
-    [YamlMember(Alias = "force")]
-    public bool? Force { get; set; }
-
     [YamlMember(Alias = "enabled")]
     public bool? Enabled { get; set; }
 }

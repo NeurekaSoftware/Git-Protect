@@ -91,11 +91,9 @@ mirrors:
   - url: https://github.com/NeurekaSoftware/Git-Protect
     credential: github
     lfs: true
-    force: false
     enabled: true
   - url: https://gitlab.com/gitlab-org/gitlab
     lfs: false
-    force: false
     enabled: true
 
 schedule:
