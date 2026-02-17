@@ -136,7 +136,17 @@ public sealed class RetentionService
         string snapshotRootPrefix,
         CancellationToken cancellationToken)
     {
-        await objectStorageService.DeleteObjectsAsync([snapshotRootPrefix], cancellationToken);
+        if (snapshotRootPrefix.EndsWith(".tar.gz", StringComparison.Ordinal))
+        {
+            await objectStorageService.DeleteObjectsAsync([snapshotRootPrefix], cancellationToken);
+            return;
+        }
+
+        // TODO(2026-06-30): Remove legacy prefix deletion fallback after pre-launch data migration is complete.
+        AppLogger.Debug(
+            "Using legacy retention deletion for snapshot prefix. prefix={SnapshotPrefix}",
+            snapshotRootPrefix);
+        await objectStorageService.DeletePrefixAsync(snapshotRootPrefix, cancellationToken);
     }
 
     private static bool SnapshotsAreEqual(
