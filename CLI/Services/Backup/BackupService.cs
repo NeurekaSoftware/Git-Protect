@@ -76,11 +76,14 @@ public sealed class BackupService
                     try
                     {
                         var pathInfo = RepositoryPathParser.Parse(repository.CloneUrl);
+                        var repositoryIdentity = StorageKeyBuilder.BuildBackupRepositoryIdentity(backup.Provider, pathInfo);
+                        var backupIndexObjectKey = StorageKeyBuilder.BuildBackupRepositoryIndexObjectKey(backup.Provider, pathInfo);
+                        var indexContent = await objectStorageService.GetTextIfExistsAsync(backupIndexObjectKey, cancellationToken);
+                        var indexDocument = ParseOrCreateRepositoryIndex(indexContent, repositoryIdentity);
+                        var latestArchiveSha256 = GetLatestSnapshotSha256(indexDocument);
                         var timestamp = DateTimeOffset.UtcNow;
                         var backupPrefix = StorageKeyBuilder.BuildBackupPrefix(backup.Provider, pathInfo, timestamp);
                         var archiveObjectKey = $"{backupPrefix}/{ArchiveObjectName}";
-                        var repositoryIdentity = StorageKeyBuilder.BuildBackupRepositoryIdentity(backup.Provider, pathInfo);
-                        var backupIndexObjectKey = StorageKeyBuilder.BuildBackupRepositoryIndexObjectKey(backup.Provider, pathInfo);
                         var localPath = Path.Combine(_workingRoot, "backups", ComputeDeterministicFolderName($"{backup.Provider}:{repository.CloneUrl}"));
                         AppLogger.Info($"backup: syncing '{repository.CloneUrl}'.");
                         AppLogger.Debug($"backup: localPath='{localPath}', prefix='{backupPrefix}'.");
@@ -97,11 +100,11 @@ public sealed class BackupService
                         var archiveUploadResult = await objectStorageService.UploadDirectoryAsTarGzAsync(
                             localPath,
                             archiveObjectKey,
-                            cancellationToken);
+                            cancellationToken,
+                            latestArchiveSha256,
+                            useHeadHashCheck: false);
                         if (archiveUploadResult.Uploaded)
                         {
-                            var indexContent = await objectStorageService.GetTextIfExistsAsync(backupIndexObjectKey, cancellationToken);
-                            var indexDocument = ParseOrCreateRepositoryIndex(indexContent, repositoryIdentity);
                             indexDocument.Snapshots = indexDocument.Snapshots
                                 .Where(IsValidSnapshot)
                                 .Where(snapshot => !string.Equals(snapshot.RootPrefix, backupPrefix, StringComparison.Ordinal))
@@ -113,10 +116,14 @@ public sealed class BackupService
                                 ArchiveSha256 = archiveUploadResult.Sha256
                             });
 
-                            await objectStorageService.UploadTextAsync(
-                                backupIndexObjectKey,
-                                StorageIndexDocuments.Serialize(indexDocument),
-                                cancellationToken);
+                            var updatedIndexContent = StorageIndexDocuments.Serialize(indexDocument);
+                            if (!string.Equals(indexContent, updatedIndexContent, StringComparison.Ordinal))
+                            {
+                                await objectStorageService.UploadTextAsync(
+                                    backupIndexObjectKey,
+                                    updatedIndexContent,
+                                    cancellationToken);
+                            }
 
                             if (knownIndexKeys.Add(backupIndexObjectKey))
                             {
@@ -221,6 +228,15 @@ public sealed class BackupService
     private static bool IsValidSnapshot(BackupSnapshotDocument snapshot)
     {
         return !string.IsNullOrWhiteSpace(snapshot.RootPrefix) && snapshot.TimestampUnixSeconds > 0;
+    }
+
+    private static string? GetLatestSnapshotSha256(BackupRepositoryIndexDocument indexDocument)
+    {
+        return indexDocument.Snapshots
+            .Where(IsValidSnapshot)
+            .OrderByDescending(snapshot => snapshot.TimestampUnixSeconds)
+            .Select(snapshot => snapshot.ArchiveSha256)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
     }
 
     private static async Task<BackupIndexRegistryDocument> LoadBackupRegistryAsync(
