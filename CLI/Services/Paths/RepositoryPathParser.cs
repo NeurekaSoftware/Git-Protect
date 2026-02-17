@@ -44,6 +44,7 @@ public static class RepositoryPathParser
         return new RepositoryPathInfo
         {
             BaseDomain = NormalizeSegment(GetBaseDomain(uri.Host)),
+            FullDomain = NormalizeSegment(uri.Host),
             Owner = owner,
             Group = group,
             SecondaryGroup = secondaryGroup,

@@ -18,7 +18,7 @@ public static class StorageKeyBuilder
 
     public static string BuildMirrorPrefix(RepositoryPathInfo repository)
     {
-        var segments = new List<string> { "mirrors", repository.BaseDomain };
+        var segments = new List<string> { "mirrors", repository.FullDomain };
         segments.AddRange(repository.Hierarchy);
         return string.Join('/', segments);
     }

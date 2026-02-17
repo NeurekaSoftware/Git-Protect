@@ -10,7 +10,7 @@ namespace CLI.Services.Backup;
 public sealed class MirrorService
 {
     private const string MirrorMarkerName = ".mirror-root";
-    private const string ArchiveObjectName = "repo.tar.gz";
+    private const string ArchiveObjectNameSuffix = "_repo.tar.gz";
 
     private readonly IGitRepositoryService _gitRepositoryService;
     private readonly Func<StorageConfig, IObjectStorageService> _objectStorageServiceFactory;
@@ -80,7 +80,8 @@ public sealed class MirrorService
                     mirror.Lfs == true,
                     cancellationToken);
 
-                var archiveObjectKey = $"{mirrorPrefix}/{ArchiveObjectName}";
+                var timestamp = DateTimeOffset.UtcNow;
+                var archiveObjectKey = $"{mirrorPrefix}/{BuildArchiveObjectName(timestamp)}";
                 await objectStorageService.UploadDirectoryAsTarGzAsync(
                     localPath,
                     archiveObjectKey,
@@ -194,5 +195,10 @@ public sealed class MirrorService
         }
 
         return localPath;
+    }
+
+    private static string BuildArchiveObjectName(DateTimeOffset timestamp)
+    {
+        return $"{timestamp.ToUnixTimeSeconds()}{ArchiveObjectNameSuffix}";
     }
 }
