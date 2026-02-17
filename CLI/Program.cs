@@ -16,8 +16,8 @@ class Program
     static async Task<int> Main(string[] args)
     {
         BuildMetadata.LoadFromEnvironment();
-        AppLogger.Info($"Version: {BuildMetadata.Version}");
-        AppLogger.Info($"Commit: {BuildMetadata.Commit}");
+        AppLogger.Info("Git Protect");
+        AppLogger.Info($"Version: {BuildMetadata.Version} ({BuildMetadata.Commit})");
 
         var settingsPath = ResolveSettingsPath(args);
         AppLogger.Info($"Using settings path '{settingsPath}'.");
