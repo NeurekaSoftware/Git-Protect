@@ -5,9 +5,7 @@ public interface IObjectStorageService
     Task<ArchiveUploadResult> UploadDirectoryAsTarGzAsync(
         string localDirectory,
         string objectKey,
-        CancellationToken cancellationToken,
-        string? skipUploadIfSha256Matches = null,
-        bool useHeadHashCheck = true);
+        CancellationToken cancellationToken);
 
     Task UploadTextAsync(string objectKey, string content, CancellationToken cancellationToken);
 

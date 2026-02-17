@@ -34,8 +34,6 @@ public sealed class MirrorService
         var objectStorageService = _objectStorageServiceFactory(settings.Storage);
         var mirrorRegistryObjectKey = StorageKeyBuilder.BuildMirrorRegistryObjectKey();
 
-        var uploadsSkipped = 0;
-        var markersSkipped = 0;
         var prunedMirrors = 0;
 
         var mirrorRegistry = await LoadMirrorRegistryAsync(objectStorageService, mirrorRegistryObjectKey, cancellationToken);
@@ -83,35 +81,19 @@ public sealed class MirrorService
                     cancellationToken);
 
                 var archiveObjectKey = $"{mirrorPrefix}/{ArchiveObjectName}";
-                var archiveUploadResult = await objectStorageService.UploadDirectoryAsTarGzAsync(
+                await objectStorageService.UploadDirectoryAsTarGzAsync(
                     localPath,
                     archiveObjectKey,
                     cancellationToken);
-                if (!archiveUploadResult.Uploaded)
-                {
-                    uploadsSkipped++;
-                }
-
-                if (archiveUploadResult.Uploaded)
-                {
-                    await objectStorageService.UploadTextAsync(
-                        $"{mirrorPrefix}/{MirrorMarkerName}",
-                        $"{mirror.Url}\nsha256={archiveUploadResult.Sha256}",
-                        cancellationToken);
-                }
-                else
-                {
-                    markersSkipped++;
-                    AppLogger.Debug(
-                        "Marker file skipped because repository content is unchanged. repository={RepositoryUrl}",
-                        mirror.Url);
-                }
+                await objectStorageService.UploadTextAsync(
+                    $"{mirrorPrefix}/{MirrorMarkerName}",
+                    mirror.Url,
+                    cancellationToken);
 
                 AppLogger.Info(
-                    "Mirror sync completed. repository={RepositoryUrl}, destination={MirrorPrefix}, archiveUploaded={ArchiveUploaded}.",
+                    "Mirror sync completed. repository={RepositoryUrl}, destination={MirrorPrefix}.",
                     mirror.Url,
-                    mirrorPrefix,
-                    archiveUploadResult.Uploaded);
+                    mirrorPrefix);
             }
             catch (Exception exception)
             {
@@ -168,9 +150,7 @@ public sealed class MirrorService
         }
 
         AppLogger.Info(
-            "Mirror run completed. uploadsSkipped={UploadsSkipped}, markersSkipped={MarkersSkipped}, prunedMirrors={PrunedMirrors}.",
-            uploadsSkipped,
-            markersSkipped,
+            "Mirror run completed. prunedMirrors={PrunedMirrors}.",
             prunedMirrors);
     }
 

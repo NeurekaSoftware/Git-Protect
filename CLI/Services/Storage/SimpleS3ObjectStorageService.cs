@@ -1,8 +1,6 @@
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Reflection;
-using System.Buffers.Binary;
-using System.Security.Cryptography;
 using System.Text;
 using CLI.Configuration.Models;
 using CLI.Runtime;
@@ -13,7 +11,6 @@ using Genbox.SimpleS3.Core.Abstracts.Response;
 using Genbox.SimpleS3.Core.Common.Authentication;
 using Genbox.SimpleS3.Core.Common.Exceptions;
 using Genbox.SimpleS3.Core.Extensions;
-using Genbox.SimpleS3.Core.Network.Responses.Objects;
 using Genbox.SimpleS3.Extensions.GenericS3;
 using Genbox.SimpleS3.GenericS3;
 using Genbox.SimpleS3.ProviderBase;
@@ -22,8 +19,6 @@ namespace CLI.Services.Storage;
 
 public sealed class SimpleS3ObjectStorageService : IObjectStorageService
 {
-    private const string ArchiveHashMetadataKey = "gitprotect-sha256";
-
     private readonly IObjectClient _objectClient;
     private readonly string _bucket;
 
@@ -52,23 +47,20 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         _objectClient = client;
         AppLogger.Info("Object storage client initialized. provider=GenericS3");
         AppLogger.Debug(
-            "Object storage settings: endpoint={Endpoint}, resolvedEndpoint={ResolvedEndpoint}, region={Region}, bucket={Bucket}, forcePathStyle={ForcePathStyle}, payloadSignatureMode={PayloadSignatureMode}, alwaysCalculateContentMd5={AlwaysCalculateContentMd5}, archiveHashMetadataKey={ArchiveHashMetadataKey}.",
+            "Object storage settings: endpoint={Endpoint}, resolvedEndpoint={ResolvedEndpoint}, region={Region}, bucket={Bucket}, forcePathStyle={ForcePathStyle}, payloadSignatureMode={PayloadSignatureMode}, alwaysCalculateContentMd5={AlwaysCalculateContentMd5}.",
             storage.Endpoint,
             resolvedEndpoint,
             storage.Region,
             storage.Bucket,
             storage.ForcePathStyle,
             payloadSignatureMode,
-            alwaysCalculateContentMd5,
-            ArchiveHashMetadataKey);
+            alwaysCalculateContentMd5);
     }
 
     public async Task<ArchiveUploadResult> UploadDirectoryAsTarGzAsync(
         string localDirectory,
         string objectKey,
-        CancellationToken cancellationToken,
-        string? skipUploadIfSha256Matches = null,
-        bool useHeadHashCheck = true)
+        CancellationToken cancellationToken)
     {
         if (!Directory.Exists(localDirectory))
         {
@@ -82,55 +74,14 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         }
 
         AppLogger.Debug(
-            "Preparing archive upload. localDirectory={LocalDirectory}, objectKey={ObjectKey}, useHeadHashCheck={UseHeadHashCheck}.",
+            "Preparing archive upload. localDirectory={LocalDirectory}, objectKey={ObjectKey}.",
             localDirectory,
-            normalizedObjectKey,
-            useHeadHashCheck);
+            normalizedObjectKey);
         string? temporaryArchivePath = null;
 
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var archiveSha256 = ComputeDirectoryContentSha256(localDirectory, cancellationToken);
-
-            if (!string.IsNullOrWhiteSpace(skipUploadIfSha256Matches) &&
-                string.Equals(skipUploadIfSha256Matches, archiveSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                AppLogger.Info(
-                    "Archive upload skipped because local hash matches the latest indexed snapshot. objectKey={ObjectKey}, sha256={Sha256}.",
-                    normalizedObjectKey,
-                    archiveSha256);
-                return new ArchiveUploadResult
-                {
-                    ObjectKey = normalizedObjectKey,
-                    Sha256 = archiveSha256,
-                    Uploaded = false,
-                    ComparedWithHead = false
-                };
-            }
-
-            if (useHeadHashCheck)
-            {
-                var headResponse = await TryHeadObjectAsync(normalizedObjectKey, cancellationToken);
-                var remoteHash = TryGetMetadataValue(headResponse?.Metadata, ArchiveHashMetadataKey);
-
-                if (headResponse is not null &&
-                    !string.IsNullOrWhiteSpace(remoteHash) &&
-                    string.Equals(remoteHash, archiveSha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    AppLogger.Info(
-                        "Archive upload skipped because remote metadata hash matches local hash. objectKey={ObjectKey}, sha256={Sha256}.",
-                        normalizedObjectKey,
-                        archiveSha256);
-                    return new ArchiveUploadResult
-                    {
-                        ObjectKey = normalizedObjectKey,
-                        Sha256 = archiveSha256,
-                        Uploaded = false,
-                        ComparedWithHead = true
-                    };
-                }
-            }
 
             temporaryArchivePath = Path.Combine(Path.GetTempPath(), $"git-protect-{Guid.NewGuid():N}.tar.gz");
             AppLogger.Debug(
@@ -148,21 +99,14 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
                 _bucket,
                 normalizedObjectKey,
                 stream,
-                request => request.Metadata.Add(ArchiveHashMetadataKey, archiveSha256),
+                _ => { },
                 cancellationToken);
             EnsureSuccess(response, $"upload archive object '{normalizedObjectKey}'");
-            AppLogger.Info(
-                "Archive uploaded. objectKey={ObjectKey}, sha256={Sha256}, comparedWithHead={ComparedWithHead}.",
-                normalizedObjectKey,
-                archiveSha256,
-                useHeadHashCheck);
+            AppLogger.Info("Archive uploaded. objectKey={ObjectKey}.", normalizedObjectKey);
 
             return new ArchiveUploadResult
             {
-                ObjectKey = normalizedObjectKey,
-                Sha256 = archiveSha256,
-                Uploaded = true,
-                ComparedWithHead = useHeadHashCheck
+                ObjectKey = normalizedObjectKey
             };
         }
         finally
@@ -256,124 +200,9 @@ public sealed class SimpleS3ObjectStorageService : IObjectStorageService
         }
     }
 
-    private async Task<HeadObjectResponse?> TryHeadObjectAsync(string objectKey, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var response = await _objectClient.HeadObjectAsync(_bucket, objectKey, _ => { }, cancellationToken);
-            EnsureSuccess(response, $"head object '{objectKey}'");
-            return response;
-        }
-        catch (S3RequestException exception) when (IsNotFound(exception.Response))
-        {
-            return null;
-        }
-    }
-
     private static bool IsNotFound(IResponse? response)
     {
         return response?.StatusCode == 404;
-    }
-
-    private static string? TryGetMetadataValue(IDictionary<string, string>? metadata, string key)
-    {
-        if (metadata is null || metadata.Count == 0)
-        {
-            return null;
-        }
-
-        if (metadata.TryGetValue(key, out var exactMatch))
-        {
-            return exactMatch;
-        }
-
-        foreach (var item in metadata)
-        {
-            if (string.Equals(item.Key, key, StringComparison.OrdinalIgnoreCase))
-            {
-                return item.Value;
-            }
-        }
-
-        return null;
-    }
-
-    private static string ComputeDirectoryContentSha256(string directoryPath, CancellationToken cancellationToken)
-    {
-        using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-
-        var entries = Directory.EnumerateFileSystemEntries(directoryPath, "*", SearchOption.AllDirectories)
-            .Select(fullPath => new
-            {
-                FullPath = fullPath,
-                RelativePath = Path.GetRelativePath(directoryPath, fullPath)
-                    .Replace(Path.DirectorySeparatorChar, '/')
-                    .Replace(Path.AltDirectorySeparatorChar, '/')
-            })
-            .OrderBy(entry => entry.RelativePath, StringComparer.Ordinal);
-
-        foreach (var entry in entries)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var attributes = File.GetAttributes(entry.FullPath);
-            if ((attributes & FileAttributes.Directory) != 0)
-            {
-                AppendByte(incrementalHash, (byte)'D');
-                AppendFramedString(incrementalHash, entry.RelativePath);
-                continue;
-            }
-
-            AppendByte(incrementalHash, (byte)'F');
-            AppendFramedString(incrementalHash, entry.RelativePath);
-
-            var fileInfo = new FileInfo(entry.FullPath);
-            AppendInt64(incrementalHash, fileInfo.Length);
-
-            using var stream = File.OpenRead(entry.FullPath);
-            var buffer = new byte[81920];
-            while (true)
-            {
-                var bytesRead = stream.Read(buffer, 0, buffer.Length);
-                if (bytesRead == 0)
-                {
-                    break;
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-                incrementalHash.AppendData(buffer.AsSpan(0, bytesRead));
-            }
-        }
-
-        return Convert.ToHexString(incrementalHash.GetHashAndReset()).ToLowerInvariant();
-    }
-
-    private static void AppendFramedString(IncrementalHash hash, string value)
-    {
-        var bytes = Encoding.UTF8.GetBytes(value);
-        AppendInt32(hash, bytes.Length);
-        hash.AppendData(bytes);
-    }
-
-    private static void AppendByte(IncrementalHash hash, byte value)
-    {
-        Span<byte> buffer = stackalloc byte[1];
-        buffer[0] = value;
-        hash.AppendData(buffer);
-    }
-
-    private static void AppendInt32(IncrementalHash hash, int value)
-    {
-        Span<byte> buffer = stackalloc byte[sizeof(int)];
-        BinaryPrimitives.WriteInt32LittleEndian(buffer, value);
-        hash.AppendData(buffer);
-    }
-
-    private static void AppendInt64(IncrementalHash hash, long value)
-    {
-        Span<byte> buffer = stackalloc byte[sizeof(long)];
-        BinaryPrimitives.WriteInt64LittleEndian(buffer, value);
-        hash.AppendData(buffer);
     }
 
     private static string? ExtractObjectKey(object item)

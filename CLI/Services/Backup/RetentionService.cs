@@ -164,8 +164,7 @@ public sealed class RetentionService
             var rightSnapshot = right[i];
 
             if (!string.Equals(leftSnapshot.RootPrefix, rightSnapshot.RootPrefix, StringComparison.Ordinal) ||
-                leftSnapshot.TimestampUnixSeconds != rightSnapshot.TimestampUnixSeconds ||
-                !string.Equals(leftSnapshot.ArchiveSha256, rightSnapshot.ArchiveSha256, StringComparison.Ordinal))
+                leftSnapshot.TimestampUnixSeconds != rightSnapshot.TimestampUnixSeconds)
             {
                 return false;
             }

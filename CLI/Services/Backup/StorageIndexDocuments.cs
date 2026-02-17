@@ -47,8 +47,6 @@ internal sealed class BackupSnapshotDocument
     public string RootPrefix { get; set; } = string.Empty;
 
     public long TimestampUnixSeconds { get; set; }
-
-    public string ArchiveSha256 { get; set; } = string.Empty;
 }
 
 internal sealed class MirrorRegistryDocument
