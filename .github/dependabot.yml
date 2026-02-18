@@ -1,8 +1,1 @@
-# File to configure Dependabot for GitHub Actions
-version: 2
-updates:
-  - package-ecosystem: "github-actions"
-    versioning-strategy: "auto"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+version: 2\nupdates:\n  - package-ecosystem: "docker"\n    directory: "/"\n    schedule:\n      interval: "weekly"\n  - package-ecosystem: "npm"\n    directory: "/"\n    schedule:\n      interval: "weekly"\n  - package-ecosystem: "github-actions"\n    directory: "/"\n    schedule:\n      interval: "weekly"\n
