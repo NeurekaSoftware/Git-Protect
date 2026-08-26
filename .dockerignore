@@ -1,6 +1,6 @@
 .git
 .gitattributes
-.gitlab-ci.yml
+.github
 .env
 config/
 compose.yaml

@@ -55,8 +55,8 @@ Automatically back up repositories from major Git forges to your S3-compatible o
 Download the compose file and the environment template (saved as `.env`):
 
 ```sh
-curl -fsSLO https://code.neureka.dev/git/backup/-/raw/main/compose.yaml
-curl -fsSL -o .env https://code.neureka.dev/git/backup/-/raw/main/.env.example
+curl -fsSLO https://raw.githubusercontent.com/neurekadev/git-backup/main/compose.yaml
+curl -fsSL -o .env https://raw.githubusercontent.com/neurekadev/git-backup/main/.env.example
 ```
 
 Create your settings file at `config/settings.yaml` next to `compose.yaml` (see [settings.yaml](#settingsyaml)),
@@ -125,7 +125,7 @@ repositories:
   - mode: url
     credential: gitlab
     url:
-      - https://code.neureka.dev/git/backup
+      - https://github.com/neurekadev/git-backup
       - https://code.neureka.dev/git/website
 
 schedule:
