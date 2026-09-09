@@ -1,0 +1,18 @@
+version: "2"
+
+linters:
+  default: standard
+  settings:
+    staticcheck:
+      # ST1005 (no trailing punctuation in error strings) is disabled: several
+      # error strings are verbatim ports of the previous implementation's
+      # user-facing validation messages, which end with a period.
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1005
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022

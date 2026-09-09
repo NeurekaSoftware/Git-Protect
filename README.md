@@ -66,6 +66,17 @@ then start the stack:
 docker compose up -d
 ```
 
+### Deployment notes
+
+The image is a standalone static binary on a minimal base — no shell, no entrypoint script. The
+container runs directly as the `user:` from `compose.yaml` (PUID/PGID from `.env`), and the process
+receives SIGTERM as PID 1, so `docker compose stop` drains in-flight work cleanly.
+
+> [!NOTE]
+> The data volume is seeded with uid/gid 1000 ownership on first mount. If you change `PUID`/`PGID`
+> later, run a one-time `docker compose run --rm -u 0 --entrypoint sh -c "chown -R PUID:PGID /app/data"`-style
+> fixup or adjust the volume ownership yourself.
+
 ### settings.yaml
 
 Place `settings.yaml` inside a `config/` directory next to `compose.yaml` (so the file is at
@@ -135,6 +146,10 @@ schedule:
 concurrency:
   repositories: 1
   metadata: 1
+
+health:
+  port: 8080
+  bind: localhost
 ```
 
 Each entry under `repositories` accepts the options below. **Common** options apply to both modes; the rest belong to `mode: provider` or `mode: url`.
@@ -185,8 +200,33 @@ The optional `concurrency` section tunes parallelism and defaults to fully seque
 > [!TIP]
 > Raising these overlaps network-bound work, but increases concurrent memory, local disk, and provider/S3 request pressure — raise gradually and watch for rate limiting (HTTP 429). With `cache: false`, running repositories in parallel multiplies peak local disk by the degree.
 
-> [!TIP]
-> The image is tuned for a small memory footprint (workstation GC that aggressively returns memory to the OS). This is ideal for a background backup, but adds some GC CPU. On a host where CPU matters more than RAM, lower it by setting `DOTNET_GCConserveMemory` (0–9, default `9`) in your environment — for example `DOTNET_GCConserveMemory=0` to disable it.
+The optional `health` section exposes a small HTTP status endpoint so a stalled scheduler is visible from the outside:
+
+| Option | Description | Default |
+|---|---|---|
+| `health.port` | Port the status listener binds to; `0` disables it. | `8080` |
+| `health.bind` | Interface to listen on. Use `0.0.0.0` inside a container so the port can be published. | `localhost` |
+
+`GET /` and `GET /healthz` return JSON describing the daemon; `status` reads `"ok"` until a run fails and `"degraded"` afterwards, so an Uptime-Kuma-style keyword check can alert on it:
+
+```json
+{"status":"ok","startedAt":"2026-09-09T20:29:39Z","lastRunStartedAt":null,"lastRunCompletedAt":null,"lastRunDurationSeconds":null,"lastRunOutcome":null,"nextRunAt":"2027-01-01T08:00:00Z"}
+```
+
+To publish it, add a mapping to `compose.yaml` and set the bind address:
+
+```yaml
+services:
+  git-backup:
+    ports:
+      - "8080:8080"
+```
+
+```yaml
+health:
+  port: 8080
+  bind: 0.0.0.0
+```
 
 ### Credentials
 
@@ -233,9 +273,6 @@ credentials:
 ```
 
 A referenced variable that is not set, a file that cannot be read, or a field given both ways is rejected at load rather than started up without.
-
-> [!IMPORTANT]
-> `storage.endpoint` must use `https` unless it points at loopback, so backup data and your access key id are never sent in the clear.
 
 > [!IMPORTANT]
 > Issues, pull/merge requests, releases, and their attachments are backed up for **owned** repositories only. They are never fetched for **starred** repositories — even when `includeStarred` is enabled — nor for gists or snippets.
