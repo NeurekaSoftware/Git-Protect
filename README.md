@@ -1,9 +1,42 @@
+<div align="center">
+
 # Git Backup
 
-Automatically back up repositories from major Git forges to your S3-compatible object storage.
+[![Release](https://img.shields.io/github/v/release/neurekadev/git-backup?style=flat-square&label=Release&color=F43F5E&logo=github&logoColor=F43F5E)](https://github.com/neurekadev/git-backup/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/neurekadev/git-backup/CI.yaml?branch=main&style=flat-square&label=CI&color=8B5CF6&logo=githubactions&logoColor=8B5CF6)](https://github.com/neurekadev/git-backup/actions/workflows/CI.yaml)
+[![License](https://img.shields.io/github/license/neurekadev/git-backup?style=flat-square&label=License&color=14B8A6&logo=opensourceinitiative&logoColor=14B8A6)](./LICENSE.md)
+[![AI](https://img.shields.io/badge/AI-assisted-5786FE?style=flat-square&logo=deepseek&logoColor=5786FE)](https://github.com/neurekadev/git-backup)
+[![Stars](https://img.shields.io/github/stars/neurekadev/git-backup?style=flat-square&label=Stars&color=EAB308&logo=googlegemini&logoColor=EAB308)](https://github.com/neurekadev/git-backup)
 
-> [!WARNING]  
+Back up repositories, issues, and more from GitHub, GitLab, and Forgejo to your S3-compatible object storage.
+
+</div>
+
+> [!WARNING]
 > This software is under active development. Expect breaking changes and incomplete features.
+
+## Quickstart
+
+Download [`compose.yaml`](./compose.yaml) and [`.env.example`](./.env.example).
+
+## Usage
+
+Save `.env.example` as `.env`, then create `config/settings.yaml` next to `compose.yaml` and start the stack:
+
+```sh
+docker compose up -d
+```
+
+The image is a standalone static binary on a minimal base — no shell, no entrypoint script. The container runs directly as the `user:` from `compose.yaml` (PUID/PGID from `.env`) and receives SIGTERM as PID 1, so `docker compose stop` drains in-flight work cleanly.
+
+> [!NOTE]
+> The data volume is seeded with uid/gid 1000 ownership on first mount. If you change `PUID`/`PGID` later, run a one-time `docker compose run --rm -u 0 --entrypoint sh -c "chown -R PUID:PGID /app/data"`-style fixup or adjust the volume ownership yourself.
+
+> [!NOTE]
+> The `config/` directory is mounted rather than the `settings.yaml` file itself: a single-file bind mount pins the container to the original inode, so edits saved with write-and-rename by most editors never reach the container.
+
+> [!TIP]
+> Settings support hot reload, so you don't have to restart your container after editing `config/settings.yaml`. The change is picked up within a couple of seconds and logged.
 
 ## Features
 
@@ -48,45 +81,9 @@ Automatically back up repositories from major Git forges to your S3-compatible o
 | HTTP / HTTPS | ✅ |
 | SSH | ❌ |
 
-## Quick Start
+## Settings
 
-### Docker Compose
-
-Download the compose file and the environment template (saved as `.env`):
-
-```sh
-curl -fsSLO https://raw.githubusercontent.com/neurekadev/git-backup/main/compose.yaml
-curl -fsSL -o .env https://raw.githubusercontent.com/neurekadev/git-backup/main/.env.example
-```
-
-Create your settings file at `config/settings.yaml` next to `compose.yaml` (see [settings.yaml](#settingsyaml)),
-then start the stack:
-
-```sh
-docker compose up -d
-```
-
-### Deployment notes
-
-The image is a standalone static binary on a minimal base — no shell, no entrypoint script. The
-container runs directly as the `user:` from `compose.yaml` (PUID/PGID from `.env`), and the process
-receives SIGTERM as PID 1, so `docker compose stop` drains in-flight work cleanly.
-
-> [!NOTE]
-> The data volume is seeded with uid/gid 1000 ownership on first mount. If you change `PUID`/`PGID`
-> later, run a one-time `docker compose run --rm -u 0 --entrypoint sh -c "chown -R PUID:PGID /app/data"`-style
-> fixup or adjust the volume ownership yourself.
-
-### settings.yaml
-
-Place `settings.yaml` inside a `config/` directory next to `compose.yaml` (so the file is at
-`config/settings.yaml`); `compose` binds that directory read-only into the container. The directory is
-mounted rather than the file itself: a single-file bind mount pins the container to the original inode,
-so edits saved by the write-and-rename that most editors use would never reach the container.
-
-> [!TIP]
-> These settings support hot reload, so you don't have to restart your container after editing
-> `config/settings.yaml`. The change is picked up within a couple of seconds and logged.
+Place `settings.yaml` inside a `config/` directory next to `compose.yaml` (so the file is at `config/settings.yaml`); `compose` binds that directory read-only into the container.
 
 ```yaml
 logging:
@@ -228,7 +225,7 @@ health:
   bind: 0.0.0.0
 ```
 
-### Credentials
+## Credentials
 
 Each key under `credentials` is a forge token, referenced by a repository job's `credential`. Every operation this tool performs is read-only, so create each token with the least privilege the features you enable require.
 
@@ -277,6 +274,8 @@ A referenced variable that is not set, a file that cannot be read, or a field gi
 > [!IMPORTANT]
 > Issues, pull/merge requests, releases, and their attachments are backed up for **owned** repositories only. They are never fetched for **starred** repositories — even when `includeStarred` is enabled — nor for gists or snippets.
 
+## Backup Storage
+
 Issues, pull/merge requests, and releases are stored as latest-state JSON documents (issues and MRs each embed their comment thread) next to the repository's Git snapshots. Each run overwrites these in place and removes documents for items that no longer exist upstream.
 
 | Item | Stored at |
@@ -286,3 +285,7 @@ Issues, pull/merge requests, and releases are stored as latest-state JSON docume
 | Releases | `releases/{tag}.json` |
 | Per-collection manifest | `{collection}/index.json` |
 | Downloaded attachments | `{collection}/attachments/{id}/` |
+
+## Why Use Git Backup?
+
+Point it at your GitHub, GitLab, or Forgejo account once and it keeps running a scheduled mirror of everything you own: repositories, Git LFS objects, issues, pull requests, releases, and attachments, all stored in your own S3-compatible bucket. Backups use a local mirror cache so consecutive runs are fast and cheap on both ends, and the JSON documents are plain, readable snapshots you can browse or process without any vendor tooling.
