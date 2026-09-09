@@ -1,4 +1,4 @@
-bin/
-obj/
-config/settings.yaml
-.env
+git-backup
+git-backup.exe
+/config/settings.yaml
+/.env

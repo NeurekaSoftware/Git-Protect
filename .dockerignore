@@ -5,5 +5,5 @@
 config/
 compose.yaml
 *.md
-**/bin
-**/obj
+git-backup
+git-backup.exe
