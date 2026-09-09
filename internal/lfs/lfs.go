@@ -79,10 +79,10 @@ func (f *Fetcher) FetchAll(ctx context.Context, repositoryPath, remoteURL, usern
 // repository's committed .lfsconfig when present, otherwise the remote URL's
 // standard /info/lfs root. The batch request authenticates with the remote's
 // credential, so an override is honored only when it is an absolute http(s)
-// URL on the remote's own host — a hostile .lfsconfig must not redirect that
-// credential to a host of its choosing. Reading .lfsconfig is best-effort —
-// any failure falls back to the derived endpoint, matching the common
-// deployment.
+// URL on the remote's own host and scheme — a hostile .lfsconfig must not
+// redirect that credential elsewhere or downgrade it to plaintext. Reading
+// .lfsconfig is best-effort — any failure falls back to the derived endpoint,
+// matching the common deployment.
 func resolveEndpoint(repository *git.Repository, remoteURL string) (string, error) {
 	remote := strings.TrimSuffix(remoteURL, "/")
 	parsed, ok := paths.ParseHTTPURL(remote)
@@ -100,12 +100,37 @@ func resolveEndpoint(repository *git.Repository, remoteURL string) (string, erro
 		if !ok {
 			return "", fmt.Errorf("unsupported lfs.url '%s': only absolute http and https URLs are allowed", redactedURL(override))
 		}
-		if !strings.EqualFold(overridden.Host, parsed.Host) {
-			return "", fmt.Errorf("refusing lfs.url host '%s': the override must stay on the remote host so the remote credential is not sent elsewhere", overridden.Host)
+		if !strings.EqualFold(overridden.Scheme, parsed.Scheme) || canonicalHost(overridden) != canonicalHost(parsed) {
+			return "", fmt.Errorf("refusing lfs.url '%s': the override must stay on the remote host and scheme so the remote credential is not sent elsewhere", redactedURL(override))
+		}
+		// Drop a redundant scheme-default port so the endpoint is canonical:
+		// object-download host comparisons and logs then match hrefs rendered
+		// without the explicit port.
+		if overridden.Port() != "" && isSchemeDefaultPort(overridden) {
+			overridden.Host = strings.TrimSuffix(overridden.Host, ":"+overridden.Port())
 		}
 		return strings.TrimSuffix(overridden.String(), "/"), nil
 	}
 	return endpoint, nil
+}
+
+// isSchemeDefaultPort reports whether the URL's explicit port equals its
+// scheme's default (http 80, https 443).
+func isSchemeDefaultPort(u *url.URL) bool {
+	return (strings.EqualFold(u.Scheme, "http") && u.Port() == "80") ||
+		(strings.EqualFold(u.Scheme, "https") && u.Port() == "443")
+}
+
+// canonicalHost renders the URL's host lowercased with any scheme-default
+// port removed, so an explicit https://host:443 compares equal to
+// https://host while a redirect to any other port stays distinct.
+func canonicalHost(u *url.URL) string {
+	host := strings.ToLower(u.Hostname())
+	port := u.Port()
+	if port == "" || isSchemeDefaultPort(u) {
+		return host
+	}
+	return host + ":" + port
 }
 
 // redactedURL renders a URL with any embedded password masked, for safe

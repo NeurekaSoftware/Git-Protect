@@ -288,11 +288,13 @@ func extractGitHubAttachments(body *string, comments []Comment) []Attachment {
 		// allowlisted host before the request goes out with the token
 		// attached. Decode the path first so '%2e%2e' and '%2f' are seen as
 		// what a normalizing server will act on, then match on whole segments
-		// so a name like "chart..v2.png" is still accepted.
+		// so a name like "chart..v2.png" is still accepted. A bare '%' is no
+		// escape a server will decode either, so on a decode error the raw
+		// path is scanned rather than the attachment dropped.
 		pathOnly := strings.SplitN(match, "?", 2)[0]
 		unescaped, err := url.PathUnescape(pathOnly)
 		if err != nil {
-			return Attachment{}, false
+			unescaped = pathOnly
 		}
 		for _, segment := range strings.Split(unescaped, "/") {
 			if segment == ".." {

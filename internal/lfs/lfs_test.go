@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -355,5 +356,92 @@ func TestFetchAllRejectsNonHTTPRemoteURL(t *testing.T) {
 	err := NewFetcher().FetchAll(context.Background(), repositoryPath, "ftp://example.com/repo.git", "", "")
 	if err == nil || !strings.Contains(err.Error(), "http and https") {
 		t.Fatalf("err = %v, want an http/https rejection", err)
+	}
+}
+
+func TestCanonicalHostStripsSchemeDefaultPorts(t *testing.T) {
+	mustParse := func(raw string) *url.URL {
+		parsed, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("parse %q: %v", raw, err)
+		}
+		return parsed
+	}
+
+	if canonicalHost(mustParse("https://Example.com:443/lfs")) != canonicalHost(mustParse("https://example.com/lfs")) {
+		t.Error("an explicit https default port must equal the implicit default")
+	}
+	if canonicalHost(mustParse("http://example.com:80/lfs")) != "example.com" {
+		t.Errorf("http default port = %q, want example.com", canonicalHost(mustParse("http://example.com:80/lfs")))
+	}
+	if canonicalHost(mustParse("https://example.com:8443/lfs")) == canonicalHost(mustParse("https://example.com/lfs")) {
+		t.Error("a non-default port must stay distinct from the bare host")
+	}
+}
+
+func TestResolveEndpointOverrideHostAndScheme(t *testing.T) {
+	oid, pointerText := pointerFor([]byte("content"))
+	cases := []struct {
+		name        string
+		lfsURL      string
+		remoteURL   string
+		wantReject  bool
+		wantAddress string
+	}{
+		{
+			name:        "explicit default port matches bare remote host",
+			lfsURL:      "https://example.com:443/custom/lfs",
+			remoteURL:   "https://example.com/repo.git",
+			wantAddress: "https://example.com/custom/lfs",
+		},
+		{
+			name:       "http override downgrades the https remote",
+			lfsURL:     "http://example.com/custom/lfs",
+			remoteURL:  "https://example.com/repo.git",
+			wantReject: true,
+		},
+		{
+			name:       "foreign port on the remote host",
+			lfsURL:     "https://example.com:8443/custom/lfs",
+			remoteURL:  "https://example.com/repo.git",
+			wantReject: true,
+		},
+		{
+			name:       "off-host override",
+			lfsURL:     "https://evil.example.com/lfs",
+			remoteURL:  "https://example.com/repo.git",
+			wantReject: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			lfsServer := newFakeLFSServer(t, map[string][]byte{oid: []byte("content")})
+			repositoryPath := newRepoWithLFS(t, map[string]string{
+				".lfsconfig": "[lfs]\n\turl = " + c.lfsURL + "\n",
+				"file.bin":   pointerText,
+			})
+			repository, err := git.PlainOpen(repositoryPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			address, err := resolveEndpoint(repository, c.remoteURL)
+			if c.wantReject {
+				if err == nil {
+					t.Fatalf("resolveEndpoint = %q, want rejection", address)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveEndpoint failed: %v", err)
+			}
+			if address != c.wantAddress {
+				t.Errorf("endpoint = %q, want %q", address, c.wantAddress)
+			}
+			if lfsServer.batchCallCount() != 0 {
+				t.Error("resolveEndpoint must not contact any endpoint")
+			}
+		})
 	}
 }

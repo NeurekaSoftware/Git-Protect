@@ -744,3 +744,46 @@ func TestForEachParallelStopsOnFirstError(t *testing.T) {
 	default:
 	}
 }
+
+func TestGitHubAttachmentsTolerateBarePercentSigns(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"percent in file name", "see https://github.com/octo/repo/files/1/100%_report.png", 1},
+		{"malformed escape", "see https://user-images.githubusercontent.com/u/1/a%zz.png", 1},
+		{"trailing percent", "see https://github.com/octo/repo/files/1/data%.png", 1},
+		{"traversal still rejected", "see https://github.com/octo/repo/files/1/..%2f..%2fadmin/x.png", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := c.body
+			if attachments := extractGitHubAttachments(&body, nil); len(attachments) != c.want {
+				t.Fatalf("attachments = %+v, want %d", attachments, c.want)
+			}
+		})
+	}
+}
+
+func TestGitLabAttachmentsTolerateBarePercentSigns(t *testing.T) {
+	sha := "0123456789abcdef0123456789abcdef"
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"percent in file name", "x /uploads/" + sha + "/100%_report.png y", 1},
+		{"malformed escape", "x /uploads/" + sha + "/a%zz.png y", 1},
+		{"encoded traversal still rejected", "x /uploads/" + sha + "/%2e%2e%2fusers y", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := c.body
+			metaContext := &MetadataContext{CloneURL: "https://gitlab.com/g/p.git"}
+			if attachments := extractGitLabAttachments(metaContext, &body, nil); len(attachments) != c.want {
+				t.Fatalf("attachments = %+v, want %d", attachments, c.want)
+			}
+		})
+	}
+}
