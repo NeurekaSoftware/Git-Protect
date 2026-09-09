@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM --platform=$BUILDPLATFORM golang:1.27-noble AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-trixie AS build
 ARG TARGETARCH
 ARG GIT_TAG=dev
 ARG GIT_HASH=unknown
