@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"regexp"
 	"strings"
 
@@ -438,13 +437,11 @@ func extractGitLabAttachments(context *MetadataContext, body *string, comments [
 		// normalization walks the token-bearing request off the uploads path
 		// to any endpoint on the instance (e.g. /api/v4/users) — the host is
 		// unchanged, so the request still counts as same-origin and keeps the
-		// credential. A bare '%' is no escape a server will decode either, so
-		// on a decode error the raw name is scanned rather than the
-		// attachment dropped.
-		decodedName, err := url.PathUnescape(rawName)
-		if err != nil {
-			decodedName = rawName
-		}
+		// credential. Decoding is lenient — every valid escape resolves, a
+		// bare '%' stays literal — so an encoded traversal is caught even
+		// when the name also carries a malformed escape that would abort
+		// url.PathUnescape, while names like '100%_report.png' still pass.
+		decodedName := decodeLenient(rawName)
 		if strings.Contains(decodedName, "/") || strings.Contains(decodedName, `\`) || decodedName == "." || decodedName == ".." {
 			return Attachment{}, false
 		}

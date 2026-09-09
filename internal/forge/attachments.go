@@ -219,6 +219,54 @@ func isIPv6SiteLocal(ipv6 net.IP) bool {
 	return ipv6[0] == 0xFE && ipv6[1]&0xC0 == 0xC0
 }
 
+// decodeLenient percent-decodes value the way a lenient URL normalizer
+// does: every valid escape decodes, and a malformed escape (a bare '%') is
+// kept as its literal text. url.PathUnescape cannot serve here — it aborts
+// the whole string on the first malformed escape, which would let an
+// encoded traversal hide behind one stray '%' ('..%2fadmin%' decodes to
+// '../../admin%' server-side but errors locally, and a raw-text fallback
+// sees no literal dot-segment).
+func decodeLenient(value string) string {
+	if !strings.Contains(value, "%") {
+		return value
+	}
+
+	// Escape every '%' that does not begin a valid escape, then decode once:
+	// valid escapes always resolve, so nothing encoded survives into the
+	// result the caller checks.
+	var builder strings.Builder
+	builder.Grow(len(value))
+	for index := 0; index < len(value); index++ {
+		if value[index] == '%' && !isValidEscape(value[index:]) {
+			builder.WriteString("%25")
+			continue
+		}
+		builder.WriteByte(value[index])
+	}
+	decoded, err := url.PathUnescape(builder.String())
+	if err != nil {
+		// The rewrite above leaves only valid escapes, so this is
+		// unreachable; fall back to the raw value rather than guessing.
+		return value
+	}
+	return decoded
+}
+
+// isValidEscape reports whether text begins with a percent escape: '%'
+// followed by two hexadecimal digits.
+func isValidEscape(text string) bool {
+	if len(text) < 3 || text[0] != '%' {
+		return false
+	}
+	return isHexDigit(text[1]) && isHexDigit(text[2])
+}
+
+func isHexDigit(char byte) bool {
+	return char >= '0' && char <= '9' ||
+		char >= 'a' && char <= 'f' ||
+		char >= 'A' && char <= 'F'
+}
+
 // SanitizeFileName produces a safe storage-key leaf from an upload's raw file
 // name: strips any path, decodes URL escapes, and replaces characters outside
 // [A-Za-z0-9._-] so the name matches the same normalization discipline used

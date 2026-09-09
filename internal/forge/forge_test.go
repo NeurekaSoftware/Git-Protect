@@ -787,3 +787,69 @@ func TestGitLabAttachmentsTolerateBarePercentSigns(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeLenient(t *testing.T) {
+	cases := []struct {
+		value string
+		want  string
+	}{
+		{"plain.png", "plain.png"},
+		{"100%_report.png", "100%_report.png"}, // bare '%' stays literal
+		{"a%zz.png", "a%zz.png"},               // invalid hex stays literal
+		{"data%.png", "data%.png"},             // trailing bare '%'
+		{"%2e%2e%2fx", "../x"},                 // valid escapes decode
+		{"..%2f..%2fadmin%", "../../admin%"},   // valid escape decodes beside a malformed one
+		{"%2e%2e%/x", "..%/x"},                 // mixed: encoded traversal + malformed tail
+		{"incomplete%2", "incomplete%2"},       // truncated escape stays literal
+		{"space%20name.png", "space name.png"}, // routine decoding unaffected
+		{"upper%2FCASE", "upper/CASE"},         // uppercase hex decodes
+		{"double%2525", "double%25"},           // only one decode round
+	}
+	for _, c := range cases {
+		if got := decodeLenient(c.value); got != c.want {
+			t.Errorf("decodeLenient(%q) = %q, want %q", c.value, got, c.want)
+		}
+	}
+}
+
+func TestGitHubAttachmentsRejectMixedEscapeTraversal(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"valid traversal with malformed tail", "see https://github.com/octo/repo/files/1/..%2f..%2fadmin%2fx%.png", 0},
+		{"encoded traversal with malformed tail", "see https://github.com/octo/repo/files/1/%2e%2e%2fadmin%.png", 0},
+		{"bare-percent name still accepted", "see https://github.com/octo/repo/files/1/100%_report.png", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := c.body
+			if attachments := extractGitHubAttachments(&body, nil); len(attachments) != c.want {
+				t.Fatalf("attachments = %+v, want %d", attachments, c.want)
+			}
+		})
+	}
+}
+
+func TestGitLabAttachmentsRejectMixedEscapeTraversal(t *testing.T) {
+	sha := "0123456789abcdef0123456789abcdef"
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"valid traversal with malformed tail", "x /uploads/" + sha + "/..%2fusers%.png y", 0},
+		{"encoded traversal with malformed tail", "x /uploads/" + sha + "/%2e%2e%2fusers%.png y", 0},
+		{"bare-percent name still accepted", "x /uploads/" + sha + "/100%_report.png y", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := c.body
+			metaContext := &MetadataContext{CloneURL: "https://gitlab.com/g/p.git"}
+			if attachments := extractGitLabAttachments(metaContext, &body, nil); len(attachments) != c.want {
+				t.Fatalf("attachments = %+v, want %d", attachments, c.want)
+			}
+		})
+	}
+}
