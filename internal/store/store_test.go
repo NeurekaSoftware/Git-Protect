@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -642,5 +643,50 @@ func TestRetryHonorsRetryAfterAndBackoff(t *testing.T) {
 	}
 	if len(fake.puts) != 1 {
 		t.Errorf("recorded puts = %d, want 1", len(fake.puts))
+	}
+}
+
+// errorAfterPayloadReader yields its payload once, then fails every further
+// read with err — the shape of a size-capped attachment stream that hits its
+// limit mid-body.
+type errorAfterPayloadReader struct {
+	payload []byte
+	err     error
+	done    bool
+}
+
+func (r *errorAfterPayloadReader) Read(p []byte) (int, error) {
+	if !r.done {
+		r.done = true
+		return copy(p, r.payload), nil
+	}
+	return 0, r.err
+}
+
+func TestProducePartsFailsOnMidStreamReadError(t *testing.T) {
+	readErr := errors.New("attachment exceeds the 100 byte limit")
+	jobs := make(chan multipartJob, multipartParallelParts-1)
+	state := newMultipartState()
+
+	err := produceParts(context.Background(), &errorAfterPayloadReader{payload: []byte("abc"), err: readErr}, jobs, state)
+	if !errors.Is(err, readErr) {
+		t.Fatalf("err = %v, want %v", err, readErr)
+	}
+	if state.err() != nil {
+		t.Errorf("worker error = %v, want none", state.err())
+	}
+}
+
+func TestProducePartsKeepsShortFinalPartOnUnexpectedEOF(t *testing.T) {
+	jobs := make(chan multipartJob, multipartParallelParts-1)
+	state := newMultipartState()
+
+	err := produceParts(context.Background(), bytes.NewReader([]byte("abc")), jobs, state)
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	job := <-jobs
+	if string(job.data) != "abc" {
+		t.Errorf("final part = %q, want %q", job.data, "abc")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -282,12 +283,18 @@ func mapGist(item map[string]any) (DiscoveredRepository, bool) {
 func extractGitHubAttachments(body *string, comments []Comment) []Attachment {
 	return scanBodyAndComments(body, comments, githubAttachmentReference, func(match string) (Attachment, bool) {
 		// The trailing pattern permits '/' and '.', so untrusted body text can
-		// embed dot-segments that URL normalization would resolve into a
-		// different path on the same allowlisted host before the request goes
-		// out with the token attached. Match on whole segments so a name like
-		// "chart..v2.png" is still accepted.
+		// embed dot-segments — literal or percent-encoded — that URL
+		// normalization would resolve into a different path on the same
+		// allowlisted host before the request goes out with the token
+		// attached. Decode the path first so '%2e%2e' and '%2f' are seen as
+		// what a normalizing server will act on, then match on whole segments
+		// so a name like "chart..v2.png" is still accepted.
 		pathOnly := strings.SplitN(match, "?", 2)[0]
-		for _, segment := range strings.Split(pathOnly, "/") {
+		unescaped, err := url.PathUnescape(pathOnly)
+		if err != nil {
+			return Attachment{}, false
+		}
+		for _, segment := range strings.Split(unescaped, "/") {
 			if segment == ".." {
 				return Attachment{}, false
 			}

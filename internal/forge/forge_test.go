@@ -3,7 +3,9 @@ package forge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -583,5 +585,162 @@ func TestFactoryResolution(t *testing.T) {
 	}
 	if factory.TryResolveMetadata("forgejo") == nil {
 		t.Error("Forgejo should expose project metadata")
+	}
+}
+
+func TestIsPrivateOrLocalCatchesSiteLocalRange(t *testing.T) {
+	cases := []struct {
+		address string
+		want    bool
+	}{
+		{"fec0::1", true},      // start of fec0::/10
+		{"feff::1", true},      // end of fec0::/10
+		{"fe80::1", true},      // link-local
+		{"2001:db8::1", false}, // public IPv6
+		{"10.1.2.3", true},     // private IPv4
+		{"8.8.8.8", false},     // public IPv4
+	}
+	for _, c := range cases {
+		if got := isPrivateOrLocal(net.ParseIP(c.address)); got != c.want {
+			t.Errorf("isPrivateOrLocal(%s) = %v, want %v", c.address, got, c.want)
+		}
+	}
+}
+
+func TestGitHubAttachmentsRejectEncodedDotSegments(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"literal traversal", "see https://github.com/octo/repo/files/1/../../admin/x.png", 0},
+		{"encoded dot segment", "see https://github.com/octo/repo/files/1/%2e%2e/admin/x.png", 0},
+		{"encoded dot segment and slash", "see https://github.com/octo/repo/files/1/%2e%2e%2fadmin/x.png", 0},
+		{"uppercase encoding", "see https://github.com/octo/repo/files/1/%2E%2E/admin/x.png", 0},
+		{"query-only encoding is fine", "see https://github.com/octo/repo/files/1/ok.png?next=%2e%2e", 1},
+		{"double-dot file name is fine", "see https://github.com/octo/repo/files/1/chart..v2.png", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := c.body
+			if attachments := extractGitHubAttachments(&body, nil); len(attachments) != c.want {
+				t.Fatalf("attachments = %+v, want %d", attachments, c.want)
+			}
+		})
+	}
+}
+
+func TestGitLabAttachmentsRejectEncodedTraversal(t *testing.T) {
+	sha := "0123456789abcdef0123456789abcdef"
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"literal traversal", "x /uploads/" + sha + "/../../api/v4/users y", 0},
+		{"encoded traversal", "x /uploads/" + sha + "/%2e%2e%2fapi/v4/users y", 0},
+		{"encoded dot segment", "x /uploads/" + sha + "/%2e%2e y", 0},
+		{"encoded separator", "x /uploads/" + sha + "/a%2fb.png y", 0},
+		{"clean name", "x /uploads/" + sha + "/report.pdf y", 1},
+		{"double-dot file name", "x /uploads/" + sha + "/chart..v2.png y", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			body := c.body
+			metaContext := &MetadataContext{CloneURL: "https://gitlab.com/g/p.git"}
+			if attachments := extractGitLabAttachments(metaContext, &body, nil); len(attachments) != c.want {
+				t.Fatalf("attachments = %+v, want %d", attachments, c.want)
+			}
+		})
+	}
+}
+
+func TestForEachParallelReturnsContextErrorWithoutCallingFn(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var calls int
+	err := forEachParallel(ctx, 4, []int{1, 2, 3}, func(item int) error {
+		calls++
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	if calls != 0 {
+		t.Errorf("fn called %d times, want 0", calls)
+	}
+}
+
+func TestForEachParallelDeliversEveryItem(t *testing.T) {
+	items := make([]int, 32)
+	for i := range items {
+		items[i] = i
+	}
+
+	var mu sync.Mutex
+	seen := make(map[int]bool)
+	err := forEachParallel(context.Background(), 4, items, func(item int) error {
+		mu.Lock()
+		defer mu.Unlock()
+		seen[item] = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if len(seen) != len(items) {
+		t.Errorf("fn ran for %d of %d items", len(seen), len(items))
+	}
+}
+
+func TestForEachParallelStopsOnFirstError(t *testing.T) {
+	sentinel := errors.New("item failed")
+	entered := make(chan int, 8)
+	start := make(chan struct{})
+	failed := make(chan struct{})
+	finish := make(chan struct{})
+	var once sync.Once
+
+	items := make([]int, 8)
+	for i := range items {
+		items[i] = i
+	}
+
+	result := make(chan error, 1)
+	go func() {
+		result <- forEachParallel(context.Background(), 4, items, func(item int) error {
+			entered <- item
+			<-start
+			if item == 0 {
+				once.Do(func() { close(failed) })
+				return sentinel
+			}
+			<-finish
+			return nil
+		})
+	}()
+
+	// The concurrency bound guarantees exactly four items enter before any
+	// can return: all four block on start, so the producer cannot fill more
+	// slots until the test releases them.
+	for received := 0; received < 4; received++ {
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for the first four items to start")
+		}
+	}
+	close(start)
+	<-failed
+	close(finish)
+
+	if err := <-result; !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
+	}
+	select {
+	case extra := <-entered:
+		t.Errorf("item %d was dispatched after the first failure", extra)
+	default:
 	}
 }

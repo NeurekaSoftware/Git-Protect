@@ -211,9 +211,12 @@ func isPrivateOrLocal(address net.IP) bool {
 }
 
 // isIPv6SiteLocal reports whether the address is in fec0::/10, the deprecated
-// site-local range (Go has no direct predicate for it).
+// site-local range (Go has no direct predicate for it). The /10 prefix fixes
+// the top two bits of the second byte, so the mask must compare against 0xC0;
+// 0x80 would match only half the range while link-local (fe80::/10, masked
+// 0x80) is already covered by IsLinkLocalUnicast.
 func isIPv6SiteLocal(ipv6 net.IP) bool {
-	return ipv6[0] == 0xFE && ipv6[1]&0xC0 == 0x80
+	return ipv6[0] == 0xFE && ipv6[1]&0xC0 == 0xC0
 }
 
 // SanitizeFileName produces a safe storage-key leaf from an upload's raw file

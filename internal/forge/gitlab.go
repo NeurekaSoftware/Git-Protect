@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -430,13 +431,19 @@ func extractGitLabAttachments(context *MetadataContext, body *string, comments [
 		sha := groups[1]
 		rawName := groups[2]
 
-		// The name comes from untrusted issue/comment text. A '/' or '..'
-		// would survive into the download URL, where URL dot-segment
+		// The name comes from untrusted issue/comment text and is decoded
+		// before checking, so an encoded separator or dot-segment (e.g.
+		// '%2e%2e') cannot smuggle traversal past the raw-text check. A '/'
+		// or '..' would survive into the download URL, where URL dot-segment
 		// normalization walks the token-bearing request off the uploads path
 		// to any endpoint on the instance (e.g. /api/v4/users) — the host is
 		// unchanged, so the request still counts as same-origin and keeps the
 		// credential.
-		if strings.Contains(rawName, "/") || strings.Contains(rawName, `\`) || rawName == "." || rawName == ".." {
+		decodedName, err := url.PathUnescape(rawName)
+		if err != nil {
+			return Attachment{}, false
+		}
+		if strings.Contains(decodedName, "/") || strings.Contains(decodedName, `\`) || decodedName == "." || decodedName == ".." {
 			return Attachment{}, false
 		}
 

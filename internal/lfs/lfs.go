@@ -14,11 +14,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/neurekadev/git-backup/internal/paths"
 )
 
 // ErrDisabled reports that the remote has Git LFS turned off entirely, which is
@@ -75,12 +77,17 @@ func (f *Fetcher) FetchAll(ctx context.Context, repositoryPath, remoteURL, usern
 
 // resolveEndpoint determines the LFS API root: an lfs.url override from the
 // repository's committed .lfsconfig when present, otherwise the remote URL's
-// standard /info/lfs root. Reading .lfsconfig is best-effort — any failure
-// falls back to the derived endpoint, matching the common deployment.
+// standard /info/lfs root. The batch request authenticates with the remote's
+// credential, so an override is honored only when it is an absolute http(s)
+// URL on the remote's own host — a hostile .lfsconfig must not redirect that
+// credential to a host of its choosing. Reading .lfsconfig is best-effort —
+// any failure falls back to the derived endpoint, matching the common
+// deployment.
 func resolveEndpoint(repository *git.Repository, remoteURL string) (string, error) {
 	remote := strings.TrimSuffix(remoteURL, "/")
-	if remote == "" {
-		return "", fmt.Errorf("empty remote URL")
+	parsed, ok := paths.ParseHTTPURL(remote)
+	if !ok {
+		return "", fmt.Errorf("unsupported remote URL '%s': only http and https are allowed", redactedURL(remoteURL))
 	}
 	endpoint := remote + "/info/lfs"
 
@@ -88,10 +95,27 @@ func resolveEndpoint(repository *git.Repository, remoteURL string) (string, erro
 	if err != nil || config == nil {
 		return endpoint, nil
 	}
-	if override := config.Raw.Section("lfs").Option("url"); override != "" {
-		return strings.TrimSuffix(override, "/"), nil
+	if override := strings.TrimSpace(config.Raw.Section("lfs").Option("url")); override != "" {
+		overridden, ok := paths.ParseHTTPURL(override)
+		if !ok {
+			return "", fmt.Errorf("unsupported lfs.url '%s': only absolute http and https URLs are allowed", redactedURL(override))
+		}
+		if !strings.EqualFold(overridden.Host, parsed.Host) {
+			return "", fmt.Errorf("refusing lfs.url host '%s': the override must stay on the remote host so the remote credential is not sent elsewhere", overridden.Host)
+		}
+		return strings.TrimSuffix(overridden.String(), "/"), nil
 	}
 	return endpoint, nil
+}
+
+// redactedURL renders a URL with any embedded password masked, for safe
+// inclusion in error messages.
+func redactedURL(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return rawURL
+	}
+	return parsed.Redacted()
 }
 
 func readLFSConfig(repository *git.Repository) (*config.Config, error) {

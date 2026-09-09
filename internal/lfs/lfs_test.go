@@ -319,3 +319,41 @@ func TestFetchAllUnknownObjectFails(t *testing.T) {
 		t.Fatalf("unknown object should be a genuine error, got %v", err)
 	}
 }
+
+func TestFetchAllRejectsUnsafeLFSConfigOverrides(t *testing.T) {
+	oid, pointerText := pointerFor([]byte("content"))
+	cases := []struct {
+		name   string
+		lfsURL string
+	}{
+		{"off-host override", "https://evil.example.com/lfs"},
+		{"non-http scheme", "ssh://git@evil.example.com/repo.git/lfs"},
+		{"relative value", "/custom/lfs"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			lfsServer := newFakeLFSServer(t, map[string][]byte{oid: []byte("content")})
+			repositoryPath := newRepoWithLFS(t, map[string]string{
+				".lfsconfig": "[lfs]\n\turl = " + c.lfsURL + "\n",
+				"file.bin":   pointerText,
+			})
+
+			err := NewFetcher().FetchAll(context.Background(), repositoryPath, lfsServer.remoteURL(), "user", "pass")
+			if err == nil || !strings.Contains(err.Error(), "lfs.url") {
+				t.Fatalf("err = %v, want it to name the lfs.url override", err)
+			}
+			if lfsServer.batchCallCount() != 0 {
+				t.Error("the batch endpoint must not be contacted for an unsafe lfs.url override")
+			}
+		})
+	}
+}
+
+func TestFetchAllRejectsNonHTTPRemoteURL(t *testing.T) {
+	repositoryPath := newRepoWithLFS(t, map[string]string{"README.md": "plain repo"})
+
+	err := NewFetcher().FetchAll(context.Background(), repositoryPath, "ftp://example.com/repo.git", "", "")
+	if err == nil || !strings.Contains(err.Error(), "http and https") {
+		t.Fatalf("err = %v, want an http/https rejection", err)
+	}
+}

@@ -350,7 +350,7 @@ func (s *ObjectStorage) multipartUpload(ctx context.Context, key string, body io
 		if errors.Is(produceErr, context.Canceled) || errors.Is(produceErr, context.DeadlineExceeded) {
 			return produceErr
 		}
-		return s.reportFailure("read archive stream", key, produceErr)
+		return s.reportFailure("read stream", key, produceErr)
 	}
 
 	_, err = s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
@@ -399,8 +399,15 @@ func produceParts(ctx context.Context, body io.Reader, jobs chan<- multipartJob,
 		}
 
 		if readErr != nil {
-			// io.ErrUnexpectedEOF: the final, short part is queued.
-			return nil
+			// io.ErrUnexpectedEOF means the final, short part is queued and
+			// the stream ended cleanly. Any other read error — including a
+			// size-cap violation from a capped attachment stream — means the
+			// stream broke mid-part, and completing the upload would store
+			// truncated data.
+			if errors.Is(readErr, io.ErrUnexpectedEOF) || errors.Is(readErr, io.EOF) {
+				return nil
+			}
+			return fmt.Errorf("read stream: %w", readErr)
 		}
 	}
 }

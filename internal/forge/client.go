@@ -348,10 +348,19 @@ func forEachParallel[T any](ctx context.Context, concurrency int, items []T, fn 
 
 	slots := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
+	var errMu sync.Mutex
 	var firstErr error
-	var errOnce sync.Once
 	fail := func(err error) {
-		errOnce.Do(func() { firstErr = err })
+		errMu.Lock()
+		defer errMu.Unlock()
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	failed := func() bool {
+		errMu.Lock()
+		defer errMu.Unlock()
+		return firstErr != nil
 	}
 
 	for _, item := range items {
@@ -359,7 +368,7 @@ func forEachParallel[T any](ctx context.Context, concurrency int, items []T, fn 
 			fail(err)
 			break
 		}
-		if firstErr != nil {
+		if failed() {
 			break
 		}
 
@@ -367,6 +376,11 @@ func forEachParallel[T any](ctx context.Context, concurrency int, items []T, fn 
 		case slots <- struct{}{}:
 		case <-ctx.Done():
 			fail(ctx.Err())
+		}
+		if failed() {
+			// Covers both a worker failure and cancellation: neither may
+			// launch another goroutine.
+			break
 		}
 
 		wg.Add(1)
@@ -380,8 +394,11 @@ func forEachParallel[T any](ctx context.Context, concurrency int, items []T, fn 
 	}
 	wg.Wait()
 
-	if firstErr != nil {
-		return firstErr
+	errMu.Lock()
+	first := firstErr
+	errMu.Unlock()
+	if first != nil {
+		return first
 	}
 	return ctx.Err()
 }
