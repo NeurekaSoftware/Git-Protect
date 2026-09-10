@@ -129,7 +129,6 @@ jobs:
             arch: amd64
             runner: ubuntu-24.04
             platform: linux/amd64
-            cache: false
           - name: Git Backup ARM64
             component: git-backup
             context: .
@@ -137,7 +136,6 @@ jobs:
             arch: arm64
             runner: ubuntu-24.04-arm
             platform: linux/arm64
-            cache: false
     env:
       IMAGE: ghcr.io/${{ github.repository }}
       SOURCE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'edge' }}
@@ -190,8 +188,8 @@ jobs:
           build-args: |
             GIT_TAG=${{ env.SOURCE_VERSION }}
             GIT_HASH=${{ github.sha }}
-          cache-from: ${{ matrix.cache && format('type=gha,scope=publish-{0}-{1}', matrix.component, matrix.arch) || '' }}
-          cache-to: ${{ matrix.cache && format('type=gha,scope=publish-{0}-{1},mode=max,ignore-error=true', matrix.component, matrix.arch) || '' }}
+          cache-from: type=gha,scope=publish-${{ matrix.component }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=publish-${{ matrix.component }}-${{ matrix.arch }},mode=max,ignore-error=true
 
       - name: Export Digest
         shell: bash
@@ -306,15 +304,9 @@ jobs:
 
       - name: Verify Multi-Platform Manifest
         shell: bash
-        env:
-          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           set -euo pipefail
-          if [[ -z "$VERSION" ]]; then
-            echo "Image metadata did not produce a version." >&2
-            exit 1
-          fi
-          manifest="$(docker buildx imagetools inspect --raw "$IMAGE:$VERSION")"
+          manifest="$(docker buildx imagetools inspect --raw "$IMAGE:$SOURCE_VERSION")"
           for platform in linux/amd64 linux/arm64; do
             os="${platform%/*}"
             architecture="${platform#*/}"

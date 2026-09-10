@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	_ "time/tzdata"
 
 	"github.com/neurekadev/git-backup/internal/backup"
 	"github.com/neurekadev/git-backup/internal/buildinfo"
@@ -59,6 +60,15 @@ func run() int {
 	}
 	slog.Info("Active log level set.", "logLevel", settings.Logging.LogLevel)
 
+	// The working root must exist before the listener, watcher, or scheduler
+	// start any work.
+	workingRoot, err := resolveWorkingRoot()
+	if err != nil {
+		slog.Error("Failed to create the working directory.", "error", err.Error())
+		return 1
+	}
+	slog.Info("Working directory ready.", "workingRoot", workingRoot)
+
 	// The health listener restarts on a settings reload when its bind or port
 	// changed. Its errors never stop the daemon.
 	healthServer := health.NewServer(settings.Health.Bind, settings.Health.Port)
@@ -76,13 +86,6 @@ func run() int {
 
 	slog.Info("Configuration loaded.",
 		"repositories", len(settings.Repositories), "watcher", liveSettings.SettingsPath())
-
-	workingRoot, err := resolveWorkingRoot()
-	if err != nil {
-		slog.Error("Failed to create the working directory.", "error", err.Error())
-		return 1
-	}
-	slog.Info("Working directory ready.", "workingRoot", workingRoot)
 
 	providerFactory, err := forge.NewDefaultFactory()
 	if err != nil {
@@ -167,18 +170,18 @@ func defaultSettingsPathCandidates() []string {
 // override, the persisted data directory in a container, or a temp directory
 // outside one.
 func resolveWorkingRoot() (string, error) {
-	if configured := strings.TrimSpace(os.Getenv("GITBACKUP_WORKING_ROOT")); configured != "" {
-		return configured, nil
+	workingRoot := strings.TrimSpace(os.Getenv("GITBACKUP_WORKING_ROOT"))
+	if workingRoot == "" {
+		// In a container, keep the git mirrors under the persisted data
+		// directory so the incremental fetch cache survives restarts and image
+		// updates instead of being fully re-cloned every run. Outside a
+		// container, fall back to a temp directory.
+		if isRunningInContainer() {
+			workingRoot = containerDataPath
+		} else {
+			workingRoot = filepath.Join(os.TempDir(), ".git-backup")
+		}
 	}
-
-	// In a container, keep the git mirrors under the persisted data directory
-	// so the incremental fetch cache survives restarts and image updates
-	// instead of being fully re-cloned every run. Outside a container, fall
-	// back to a temp directory.
-	if isRunningInContainer() {
-		return containerDataPath, nil
-	}
-	workingRoot := filepath.Join(os.TempDir(), ".git-backup")
 	if err := os.MkdirAll(workingRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create working root: %w", err)
 	}
