@@ -4,15 +4,18 @@ services:
     container_name: git-backup
     env_file:
       - .env
-    # The image is a standalone static binary with no entrypoint shell, so the
-    # container runs directly as PUID:PGID (defaults from .env). Both values
-    # must exist on the host volume; changing them later needs a one-time
-    # chown of the data volume.
-    user: "${PUID:-1000}:${PGID:-1000}"
-    security_opt:
-      - no-new-privileges:true
+    # The binary starts as root only long enough to take ownership of /app/data
+    # for PUID:PGID and drop root permanently. It keeps just the capabilities
+    # that startup step needs; the drop clears them before any work begins.
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
     cap_drop:
       - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       - git-backup
     volumes:

@@ -27,10 +27,10 @@ Save `.env.example` as `.env`, then create `config/settings.yaml` next to `compo
 docker compose up -d
 ```
 
-The image is a standalone static binary on a minimal base — no shell, no entrypoint script. The container runs directly as the `user:` from `compose.yaml` (PUID/PGID from `.env`) and receives SIGTERM as PID 1, so `docker compose stop` drains in-flight work cleanly.
+The image is a standalone static binary on a minimal base — no shell, no entrypoint script. It starts as root only long enough to take ownership of `/app/data`, then permanently drops to the `PUID`/`PGID` from `.env` and receives SIGTERM as PID 1, so `docker compose stop` drains in-flight work cleanly.
 
 > [!NOTE]
-> The data volume is seeded with uid/gid 1000 ownership on first mount. If you change `PUID`/`PGID` later, run a one-time `docker compose run --rm -u 0 --entrypoint sh -c "chown -R PUID:PGID /app/data"`-style fixup or adjust the volume ownership yourself.
+> `PUID`/`PGID` default to `1000:1000` and are applied on every start, so changing either value only requires `docker compose up -d` — the data volume is re-owned automatically, with no manual `chown`.
 
 > [!NOTE]
 > The `config/` directory is mounted rather than the `settings.yaml` file itself: a single-file bind mount pins the container to the original inode, so edits saved with write-and-rename by most editors never reach the container.

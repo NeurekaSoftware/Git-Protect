@@ -22,6 +22,7 @@ import (
 	"github.com/neurekadev/git-backup/internal/git"
 	"github.com/neurekadev/git-backup/internal/health"
 	"github.com/neurekadev/git-backup/internal/logging"
+	"github.com/neurekadev/git-backup/internal/privilege"
 	"github.com/neurekadev/git-backup/internal/scheduler"
 	"github.com/neurekadev/git-backup/internal/store"
 )
@@ -59,6 +60,19 @@ func run() int {
 	}
 	slog.Info("Active log level set.", "logLevel", settings.Logging.LogLevel)
 
+	// The working root must exist and be owned by the runtime identity before
+	// the listener, watcher, or scheduler start any work.
+	workingRoot, err := resolveWorkingRoot()
+	if err != nil {
+		slog.Error("Failed to create the working directory.", "error", err.Error())
+		return 1
+	}
+	if err := applyRuntimeIdentity(workingRoot); err != nil {
+		slog.Error("Failed to apply the runtime identity.", "error", err.Error())
+		return 1
+	}
+	slog.Info("Working directory ready.", "workingRoot", workingRoot)
+
 	// The health listener restarts on a settings reload when its bind or port
 	// changed. Its errors never stop the daemon.
 	healthServer := health.NewServer(settings.Health.Bind, settings.Health.Port)
@@ -76,13 +90,6 @@ func run() int {
 
 	slog.Info("Configuration loaded.",
 		"repositories", len(settings.Repositories), "watcher", liveSettings.SettingsPath())
-
-	workingRoot, err := resolveWorkingRoot()
-	if err != nil {
-		slog.Error("Failed to create the working directory.", "error", err.Error())
-		return 1
-	}
-	slog.Info("Working directory ready.", "workingRoot", workingRoot)
 
 	providerFactory, err := forge.NewDefaultFactory()
 	if err != nil {
@@ -163,22 +170,47 @@ func defaultSettingsPathCandidates() []string {
 	return []string{"settings.yaml"}
 }
 
+// applyRuntimeIdentity takes ownership of the working root and permanently
+// drops root privileges to the PUID/PGID identity. When neither variable is
+// set the process keeps its current identity, so native runs and operator-
+// forced users keep working; a configured but unreachable identity fails
+// startup instead of running with the wrong ownership.
+func applyRuntimeIdentity(workingRoot string) error {
+	identity, configured, err := privilege.FromEnvironment()
+	if err != nil {
+		return err
+	}
+	if !configured {
+		slog.Debug("PUID and PGID are not set; keeping the current identity.")
+		return nil
+	}
+	if identity.Root() {
+		slog.Warn("PUID and PGID are both 0; running as root.")
+		return nil
+	}
+	if err := privilege.Apply(identity, workingRoot); err != nil {
+		return err
+	}
+	slog.Info("Privileges dropped.", "uid", identity.UID, "gid", identity.GID)
+	return nil
+}
+
 // resolveWorkingRoot picks the root for the mirror cache: the explicit
 // override, the persisted data directory in a container, or a temp directory
 // outside one.
 func resolveWorkingRoot() (string, error) {
-	if configured := strings.TrimSpace(os.Getenv("GITBACKUP_WORKING_ROOT")); configured != "" {
-		return configured, nil
+	workingRoot := strings.TrimSpace(os.Getenv("GITBACKUP_WORKING_ROOT"))
+	if workingRoot == "" {
+		// In a container, keep the git mirrors under the persisted data
+		// directory so the incremental fetch cache survives restarts and image
+		// updates instead of being fully re-cloned every run. Outside a
+		// container, fall back to a temp directory.
+		if isRunningInContainer() {
+			workingRoot = containerDataPath
+		} else {
+			workingRoot = filepath.Join(os.TempDir(), ".git-backup")
+		}
 	}
-
-	// In a container, keep the git mirrors under the persisted data directory
-	// so the incremental fetch cache survives restarts and image updates
-	// instead of being fully re-cloned every run. Outside a container, fall
-	// back to a temp directory.
-	if isRunningInContainer() {
-		return containerDataPath, nil
-	}
-	workingRoot := filepath.Join(os.TempDir(), ".git-backup")
 	if err := os.MkdirAll(workingRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create working root: %w", err)
 	}
