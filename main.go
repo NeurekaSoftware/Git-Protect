@@ -188,11 +188,7 @@ func applyRuntimeIdentity(workingRoot string) error {
 		slog.Warn("PUID and PGID are both 0; running as root.")
 		return nil
 	}
-	if err := privilege.Apply(identity, workingRoot); err != nil {
-		return err
-	}
-	slog.Info("Privileges dropped.", "uid", identity.UID, "gid", identity.GID)
-	return nil
+	return privilege.Apply(identity, workingRoot)
 }
 
 // resolveWorkingRoot picks the root for the mirror cache: the explicit
