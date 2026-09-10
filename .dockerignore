@@ -2,6 +2,7 @@
 .gitattributes
 .github
 .env
+.zcode
 config/
 compose.yaml
 *.md

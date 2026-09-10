@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	_ "time/tzdata"
 
 	"github.com/neurekadev/git-backup/internal/backup"
 	"github.com/neurekadev/git-backup/internal/buildinfo"
@@ -22,7 +23,6 @@ import (
 	"github.com/neurekadev/git-backup/internal/git"
 	"github.com/neurekadev/git-backup/internal/health"
 	"github.com/neurekadev/git-backup/internal/logging"
-	"github.com/neurekadev/git-backup/internal/privilege"
 	"github.com/neurekadev/git-backup/internal/scheduler"
 	"github.com/neurekadev/git-backup/internal/store"
 )
@@ -60,15 +60,11 @@ func run() int {
 	}
 	slog.Info("Active log level set.", "logLevel", settings.Logging.LogLevel)
 
-	// The working root must exist and be owned by the runtime identity before
-	// the listener, watcher, or scheduler start any work.
+	// The working root must exist before the listener, watcher, or scheduler
+	// start any work.
 	workingRoot, err := resolveWorkingRoot()
 	if err != nil {
 		slog.Error("Failed to create the working directory.", "error", err.Error())
-		return 1
-	}
-	if err := applyRuntimeIdentity(workingRoot); err != nil {
-		slog.Error("Failed to apply the runtime identity.", "error", err.Error())
 		return 1
 	}
 	slog.Info("Working directory ready.", "workingRoot", workingRoot)
@@ -168,27 +164,6 @@ func defaultSettingsPathCandidates() []string {
 		return []string{filepath.Join(containerConfigPath, "settings.yaml")}
 	}
 	return []string{"settings.yaml"}
-}
-
-// applyRuntimeIdentity takes ownership of the working root and permanently
-// drops root privileges to the PUID/PGID identity. When neither variable is
-// set the process keeps its current identity, so native runs and operator-
-// forced users keep working; a configured but unreachable identity fails
-// startup instead of running with the wrong ownership.
-func applyRuntimeIdentity(workingRoot string) error {
-	identity, configured, err := privilege.FromEnvironment()
-	if err != nil {
-		return err
-	}
-	if !configured {
-		slog.Debug("PUID and PGID are not set; keeping the current identity.")
-		return nil
-	}
-	if identity.Root() {
-		slog.Warn("PUID and PGID are both 0; running as root.")
-		return nil
-	}
-	return privilege.Apply(identity, workingRoot)
 }
 
 // resolveWorkingRoot picks the root for the mirror cache: the explicit

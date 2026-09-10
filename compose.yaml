@@ -4,18 +4,6 @@ services:
     container_name: git-backup
     env_file:
       - .env
-    # The binary starts as root only long enough to take ownership of /app/data
-    # for PUID:PGID and drop root permanently. It keeps just the capabilities
-    # that startup step needs; the drop clears them before any work begins.
-    cap_add:
-      - CHOWN
-      - DAC_OVERRIDE
-      - SETGID
-      - SETUID
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
     networks:
       - git-backup
     volumes:
